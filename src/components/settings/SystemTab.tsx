@@ -171,7 +171,7 @@ export function SystemTab({ onPermissionChange }: SystemTabProps) {
           className="text-sm mb-4"
           style={{ color: "var(--color-text-secondary)" }}
         >
-          Configure how Note67 starts up.
+          Configure how QuickPoint starts up.
         </p>
       </div>
 
@@ -215,7 +215,7 @@ export function SystemTab({ onPermissionChange }: SystemTabProps) {
               className="text-xs"
               style={{ color: "var(--color-text-tertiary)" }}
             >
-              Start Note67 automatically when you log in
+              Start QuickPoint automatically when you log in
             </p>
           </div>
         </div>
@@ -382,7 +382,7 @@ export function SystemTab({ onPermissionChange }: SystemTabProps) {
           >
             {micAuthStatus === 0 ? (
               <p>
-                Click <strong>"Request Permission"</strong> to allow Note67 to
+                Click <strong>"Request Permission"</strong> to allow QuickPoint to
                 access your microphone. A system dialog will appear.
               </p>
             ) : (
@@ -392,7 +392,7 @@ export function SystemTab({ onPermissionChange }: SystemTabProps) {
                 </p>
                 <ol className="list-decimal list-inside space-y-1">
                   <li>Click "Open Settings" to open System Settings</li>
-                  <li>Find Note67 in the Microphone list and toggle it on</li>
+                  <li>Find QuickPoint in the Microphone list and toggle it on</li>
                   <li>Click "Refresh" to verify permission</li>
                 </ol>
               </>
@@ -521,15 +521,15 @@ export function SystemTab({ onPermissionChange }: SystemTabProps) {
                 </p>
                 <ol className="list-decimal list-inside space-y-1">
                   <li>Click "Open Settings" to open System Settings</li>
-                  <li>Find Note67 in the list and toggle it on</li>
-                  <li>Restart Note67 if prompted</li>
+                  <li>Find QuickPoint in the list and toggle it on</li>
+                  <li>Restart QuickPoint if prompted</li>
                   <li>Click "Refresh" to verify permission</li>
                 </ol>
                 <p
                   className="mt-2"
                   style={{ color: "var(--color-text-tertiary)" }}
                 >
-                  This allows Note67 to capture system audio to distinguish your
+                  This allows QuickPoint to capture system audio to distinguish your
                   voice from other participants.
                 </p>
               </div>

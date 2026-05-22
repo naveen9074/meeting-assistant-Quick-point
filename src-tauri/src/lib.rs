@@ -103,7 +103,7 @@ fn update_tray_for_update(app: &tauri::AppHandle, available: bool, version: Opti
 
 #[tauri::command]
 fn greet(name: &str) -> String {
-    format!("Hello, {}! Welcome to Note67.", name)
+    format!("Hello, {}! Welcome to QuickPoint.", name)
 }
 
 /// Clean up orphaned .tmp files from interrupted upload conversions
@@ -184,10 +184,10 @@ pub fn run() {
                 use tauri::menu::PredefinedMenuItem;
 
                 let hide_window = MenuItem::with_id(app, "hide_window", "Hide Window", true, Some("CmdOrCtrl+Q"))?;
-                let quit = MenuItem::with_id(app, "quit_app", "Quit Note67", true, Some("CmdOrCtrl+Shift+Q"))?;
+                let quit = MenuItem::with_id(app, "quit_app", "Quit QuickPoint", true, Some("CmdOrCtrl+Shift+Q"))?;
 
-                let app_submenu = SubmenuBuilder::new(app, "Note67")
-                    .item(&PredefinedMenuItem::about(app, Some("About Note67"), None)?)
+                let app_submenu = SubmenuBuilder::new(app, "QuickPoint")
+                    .item(&PredefinedMenuItem::about(app, Some("About QuickPoint"), None)?)
                     .separator()
                     .item(&hide_window)
                     .item(&quit)
@@ -463,6 +463,8 @@ pub fn run() {
             commands::end_session,
             commands::admin_get_all_sessions,
             sessions_commands::log_export,
+            commands::get_session_transcripts,
+            commands::get_session_summaries,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

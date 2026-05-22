@@ -639,7 +639,6 @@ function App() {
 
         {/* Main content area */}
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden', width: '100%' }}>
-        <div className="h-screen flex" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {/* Sidebar */}
       <aside
         className="flex flex-col border-r overflow-hidden"
@@ -1244,7 +1243,6 @@ function App() {
 
       {/* Meeting Detected Popup */}
       <MeetingDetectedPopup onStartListening={handleStartRecording} />
-    </div>
         </div>{/* end main content flex row */}
       </div>{/* end outer column flex */}
     </AuthGuard>

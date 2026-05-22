@@ -1,5 +1,5 @@
 [package]
-name = "note67"
+name = "quickpoint"
 version = "0.1.19"
 description = "A private, local notes assistant"
 authors = ["you"]
@@ -7,7 +7,7 @@ license = "AGPL-3.0-or-later"
 edition = "2024"
 
 [lib]
-name = "note67_lib"
+name = "quickpoint_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]

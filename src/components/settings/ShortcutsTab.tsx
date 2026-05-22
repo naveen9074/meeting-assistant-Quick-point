@@ -24,7 +24,7 @@ export function ShortcutsTab() {
           className="text-sm mb-4"
           style={{ color: "var(--color-text-secondary)" }}
         >
-          Use these shortcuts to quickly navigate and control Note67.
+          Use these shortcuts to quickly navigate and control QuickPoint.
         </p>
       </div>
 
