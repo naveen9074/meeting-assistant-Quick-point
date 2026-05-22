@@ -84,7 +84,7 @@ export function AppearanceTab() {
           className="text-sm mb-4"
           style={{ color: "var(--color-text-secondary)" }}
         >
-          Choose how Note67 looks to you.
+          Choose how QuickPoint looks to you.
         </p>
       </div>
 

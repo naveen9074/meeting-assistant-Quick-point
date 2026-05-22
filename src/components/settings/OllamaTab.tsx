@@ -75,7 +75,7 @@ export function OllamaTab() {
             <p className="text-xs">
               Follow our{" "}
               <a
-                href="https://note67.com/ollama-setup"
+                href="https://docs.quickpoint.ai/ollama-setup"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline font-medium"
@@ -158,7 +158,7 @@ export function OllamaTab() {
               >
                 Follow our{" "}
                 <a
-                  href="https://note67.com/ollama-setup"
+                  href="https://docs.quickpoint.ai/ollama-setup"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="underline font-medium"

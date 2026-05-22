@@ -8,38 +8,15 @@ interface UpdateNotificationProps {
 
 export function UpdateNotification({ onOpenSettings }: UpdateNotificationProps) {
   const {
-    available,
-    version,
-    downloading,
-    progress,
-    error,
-    checkForUpdates,
     downloadAndInstall,
   } = useUpdater();
-  const [dismissed, setDismissed] = useState(false);
 
-  // Check for updates on mount and periodically (every hour)
-  useEffect(() => {
-    // Initial check with a small delay to not block startup
-    const initialTimer = setTimeout(() => {
-      checkForUpdates();
-    }, 3000);
-
-    // Periodic check every hour
-    const intervalTimer = setInterval(() => {
-      checkForUpdates();
-    }, 60 * 60 * 1000);
-
-    return () => {
-      clearTimeout(initialTimer);
-      clearInterval(intervalTimer);
-    };
-  }, [checkForUpdates]);
+  // Disable update checking - will re-enable after rebranding is complete
 
   // Emit update status to Rust for tray indicator
   useEffect(() => {
-    emit("update-status-changed", { available, version: version || null });
-  }, [available, version]);
+    emit("update-status-changed", { available: false, version: null });
+  }, []);
 
   // Listen for tray install action
   useEffect(() => {
@@ -51,7 +28,8 @@ export function UpdateNotification({ onOpenSettings }: UpdateNotificationProps) 
     };
   }, [downloadAndInstall]);
 
-  if (!available || dismissed) return null;
+  // Never show update notification - disabled until rebranding complete
+  return null;
 
   const handleDismiss = () => {
     setDismissed(true);

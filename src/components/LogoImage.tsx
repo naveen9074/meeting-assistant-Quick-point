@@ -5,7 +5,7 @@ interface LogoImageProps {
 export function LogoImage({ className }: LogoImageProps) {
   return (
     <img
-      src="/logo-readme.png"
+      src="/qlogo.png"
       alt="QuickPoint"
       className={className}
     />

@@ -4,7 +4,7 @@ interface LogoIconProps {
 }
 
 /**
- * QuickPoint app icon - document with audio waveform and "67"
+ * QuickPoint app icon - document with audio waveform
  */
 export function LogoIcon({ size = 48, className }: LogoIconProps) {
   return (
@@ -16,7 +16,7 @@ export function LogoIcon({ size = 48, className }: LogoIconProps) {
       xmlns="http://www.w3.org/2000/svg"
       className={className}
     >
-      {/* Orange background */}
+      {/* Purple background */}
       <rect x="2" y="4" width="44" height="40" rx="10" fill="var(--color-accent)" />
       {/* Document */}
       <path
@@ -35,18 +35,6 @@ export function LogoIcon({ size = 48, className }: LogoIconProps) {
       <rect x="20" y="15" width="2" height="10" rx="1" fill="var(--color-accent)" />
       <rect x="24" y="16" width="2" height="8" rx="1" fill="var(--color-accent)" />
       <rect x="28" y="18" width="2" height="4" rx="1" fill="var(--color-accent)" />
-      {/* 67 text */}
-      <text
-        x="24"
-        y="34"
-        fontFamily="-apple-system, BlinkMacSystemFont, system-ui, sans-serif"
-        fontSize="12"
-        fontWeight="700"
-        textAnchor="middle"
-        fill="var(--color-accent)"
-      >
-        67
-      </text>
     </svg>
   );
 }
@@ -62,7 +50,7 @@ export function LogoWithWordmark({ className }: LogoWithWordmarkProps) {
   return (
     <svg
       className={className}
-      viewBox="0 0 180 48"
+      viewBox="0 0 240 48"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
     >
@@ -83,18 +71,6 @@ export function LogoWithWordmark({ className }: LogoWithWordmarkProps) {
       <rect x="17" y="14" width="1.5" height="9" rx="0.75" fill="var(--color-accent)" />
       <rect x="20" y="15" width="1.5" height="7" rx="0.75" fill="var(--color-accent)" />
       <rect x="23" y="16.5" width="1.5" height="4" rx="0.75" fill="var(--color-accent)" />
-      {/* 67 text in icon */}
-      <text
-        x="22"
-        y="32"
-        fontFamily="-apple-system, BlinkMacSystemFont, system-ui, sans-serif"
-        fontSize="14"
-        fontWeight="700"
-        textAnchor="middle"
-        fill="var(--color-accent)"
-      >
-        67
-      </text>
 
       {/* Wordmark */}
       <text
@@ -104,20 +80,9 @@ export function LogoWithWordmark({ className }: LogoWithWordmarkProps) {
         fontSize="28"
         fontWeight="600"
         letterSpacing="-0.5"
-        fill="var(--color-text)"
-      >
-        Note
-      </text>
-      <text
-        x="112.5"
-        y="34"
-        fontFamily="-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif"
-        fontSize="28"
-        fontWeight="600"
-        letterSpacing="-0.5"
         fill="var(--color-accent)"
       >
-        67
+        QuickPoint
       </text>
     </svg>
   );

@@ -6,7 +6,7 @@ export function DisclaimerTab() {
           className="text-sm mb-4"
           style={{ color: "var(--color-text-secondary)" }}
         >
-          Please read the following information carefully before using Note67.
+          Please read the following information carefully before using QuickPoint.
         </p>
       </div>
 
@@ -40,7 +40,7 @@ export function DisclaimerTab() {
               className="text-xs"
               style={{ color: "var(--color-text-secondary)" }}
             >
-              Note67 is provided "as is" without warranty of any kind, express
+              QuickPoint is provided "as is" without warranty of any kind, express
               or implied. The developers are not liable for any damages arising
               from use of this software.
             </p>
@@ -154,7 +154,7 @@ export function DisclaimerTab() {
               className="text-xs"
               style={{ color: "var(--color-text-secondary)" }}
             >
-              While Note67 stores all data locally, you are responsible for
+              While QuickPoint stores all data locally, you are responsible for
               securing your device and backing up your data. The developers are
               not responsible for data loss.
             </p>
@@ -163,7 +163,7 @@ export function DisclaimerTab() {
       </div>
 
       <p className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>
-        By using Note67, you acknowledge and accept these terms.
+        By using QuickPoint, you acknowledge and accept these terms.
       </p>
     </div>
   );

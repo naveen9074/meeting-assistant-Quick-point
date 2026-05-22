@@ -607,7 +607,7 @@ function App() {
 
   return (
     <AuthGuard onShowLogin={() => setAuthScreen('login')}>
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100%' }}>
 
         {/* Top bar — user info + logout */}
         <div style={{
@@ -638,19 +638,22 @@ function App() {
         </div>
 
         {/* Main content area */}
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        <div className="h-screen flex" style={{ flex: 1 }}>
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden', width: '100%' }}>
+        <div className="h-screen flex" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {/* Sidebar */}
       <aside
-        className="flex flex-col border-r"
+        className="flex flex-col border-r overflow-hidden"
         style={{
           width: "var(--sidebar-width)",
           backgroundColor: "var(--color-sidebar)",
           borderColor: "var(--color-border)",
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
         }}
       >
         {/* Sidebar Header */}
-        <div className="px-4 py-3 flex items-center justify-between">
+        <div className="px-4 py-3 flex items-center justify-between flex-shrink-0">
           <span
             className="text-base font-semibold"
             style={{ color: "var(--color-text)" }}
@@ -680,7 +683,7 @@ function App() {
         </div>
 
         {/* Note List */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto min-h-0">
           {loading ? (
             <div
               className="px-4 py-6 text-center text-sm"
@@ -940,8 +943,8 @@ function App() {
 
       {/* Main Content */}
       <main
-        className="flex-1 flex flex-col relative"
-        style={{ backgroundColor: "var(--color-bg)" }}
+        className="flex-1 flex flex-col relative overflow-hidden"
+        style={{ backgroundColor: "var(--color-bg)", minHeight: 0 }}
       >
         <SessionPanel />
         {selectedSection === 'my-sessions' ? (
@@ -1632,9 +1635,9 @@ function NoteView({
   };
 
   return (
-    <div className="flex-1 flex overflow-hidden">
+    <div className="flex-1 flex overflow-hidden" style={{ minHeight: 0 }}>
       {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
         {/* Header */}
         <header
         className="px-6 py-4 border-b flex items-center justify-between gap-3"
@@ -1976,7 +1979,7 @@ function NoteView({
           </span>
           <div
             className="flex-1 h-1 rounded-full overflow-hidden"
-            style={{ backgroundColor: "rgba(229, 77, 46, 0.2)" }}
+            style={{ backgroundColor: "var(--color-accent-light)" }}
           >
             <div
               className="h-full rounded-full transition-all duration-100"

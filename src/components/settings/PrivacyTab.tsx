@@ -169,7 +169,7 @@ export function PrivacyTab() {
       </div>
 
       <p className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>
-        Note67 processes everything locally. No audio or transcripts are sent to
+        QuickPoint processes everything locally. No audio or transcripts are sent to
         external servers.
       </p>
     </div>
