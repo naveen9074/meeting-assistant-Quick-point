@@ -3,6 +3,7 @@ pub mod schema;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::sync::OnceLock;
 
 use chrono::Utc;
 use rusqlite::{params, Connection};
@@ -11,6 +12,15 @@ use tauri::{AppHandle, Manager};
 use crate::db::models::{AudioSegment, Summary, SummaryType, TranscriptSegment, UploadedAudio};
 use crate::db::schema::run_migrations;
 
+static DB_PATH: OnceLock<PathBuf> = OnceLock::new();
+
+pub fn get_connection() -> anyhow::Result<Connection> {
+    let path = DB_PATH.get().ok_or_else(|| anyhow::anyhow!("Database path not initialized"))?;
+    let conn = Connection::open(path)?;
+    conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+    Ok(conn)
+}
+
 pub struct Database {
     pub conn: Mutex<Connection>,
 }
@@ -18,6 +28,7 @@ pub struct Database {
 impl Database {
     pub fn new(app_handle: &AppHandle) -> anyhow::Result<Self> {
         let db_path = get_db_path(app_handle)?;
+        let _ = DB_PATH.set(db_path.clone());
 
         // Ensure parent directory exists
         if let Some(parent) = db_path.parent() {

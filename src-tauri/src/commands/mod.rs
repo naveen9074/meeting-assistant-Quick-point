@@ -6,6 +6,9 @@ pub mod notes;
 pub mod settings;
 pub mod transcription;
 pub mod upload;
+pub mod auth;
+pub mod admin;
+pub mod sessions;
 
 pub use ai::*;
 pub use audio::*;
@@ -15,3 +18,7 @@ pub use notes::*;
 pub use settings::*;
 pub use transcription::*;
 pub use upload::*;
+pub use auth::*;
+pub use admin::*;
+pub use sessions::*;
+

@@ -1,7 +1,7 @@
 use rusqlite::Connection;
 
 #[allow(dead_code)]
-pub const SCHEMA_VERSION: i32 = 7;
+pub const SCHEMA_VERSION: i32 = 8;
 
 pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
     let version = get_schema_version(conn)?;
@@ -26,6 +26,9 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
     }
     if version < 7 {
         migrate_v7(conn)?;
+    }
+    if version < 8 {
+        migrate_v8(conn)?;
     }
 
     Ok(())
@@ -302,6 +305,145 @@ fn migrate_v7(conn: &Connection) -> rusqlite::Result<()> {
     )?;
 
     set_schema_version(conn, 7)?;
+
+    Ok(())
+}
+
+fn migrate_v8(conn: &Connection) -> rusqlite::Result<()> {
+    // Auth, session, permission and activity tables
+    conn.execute_batch("
+        CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY NOT NULL,
+            username TEXT UNIQUE NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'user',
+            is_active INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS auth_sessions (
+            id TEXT PRIMARY KEY NOT NULL,
+            user_id TEXT NOT NULL,
+            token TEXT UNIQUE NOT NULL,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            is_valid INTEGER NOT NULL DEFAULT 1,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS access_requests (
+            id TEXT PRIMARY KEY NOT NULL,
+            user_id TEXT NOT NULL,
+            request_message TEXT,
+            status TEXT NOT NULL DEFAULT 'pending',
+            reviewed_by TEXT,
+            reviewed_at TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS permissions (
+            id TEXT PRIMARY KEY NOT NULL,
+            user_id TEXT NOT NULL,
+            permission_key TEXT NOT NULL,
+            granted INTEGER NOT NULL DEFAULT 0,
+            granted_by TEXT,
+            granted_at TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS system_config (
+            key TEXT PRIMARY KEY NOT NULL,
+            value TEXT NOT NULL,
+            updated_by TEXT,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS interview_sessions (
+            id TEXT PRIMARY KEY NOT NULL,
+            user_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            session_type TEXT NOT NULL DEFAULT 'interview',
+            status TEXT NOT NULL DEFAULT 'active',
+            started_at TEXT NOT NULL,
+            ended_at TEXT,
+            notes TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS interview_audio_segments (
+            id TEXT PRIMARY KEY NOT NULL,
+            session_id TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            duration_seconds REAL,
+            recorded_at TEXT NOT NULL,
+            FOREIGN KEY (session_id) REFERENCES interview_sessions(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS interview_transcripts (
+            id TEXT PRIMARY KEY NOT NULL,
+            session_id TEXT NOT NULL,
+            audio_segment_id TEXT,
+            content TEXT NOT NULL,
+            language TEXT DEFAULT 'en',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (session_id) REFERENCES interview_sessions(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS interview_summaries (
+            id TEXT PRIMARY KEY NOT NULL,
+            session_id TEXT NOT NULL,
+            transcript_id TEXT,
+            content TEXT NOT NULL,
+            model_used TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (session_id) REFERENCES interview_sessions(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS export_logs (
+            id TEXT PRIMARY KEY NOT NULL,
+            user_id TEXT NOT NULL,
+            session_id TEXT,
+            export_format TEXT NOT NULL,
+            file_path TEXT,
+            exported_at TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        );
+
+        CREATE TABLE IF NOT EXISTS activity_logs (
+            id TEXT PRIMARY KEY NOT NULL,
+            user_id TEXT,
+            action TEXT NOT NULL,
+            entity_type TEXT,
+            entity_id TEXT,
+            metadata TEXT,
+            created_at TEXT NOT NULL
+        );
+    ")?;
+
+    // Insert default admin if not exists
+    let admin_exists: bool = conn.query_row(
+        "SELECT COUNT(*) FROM users WHERE role = 'admin'",
+        [],
+        |row| row.get::<_, i64>(0),
+    ).unwrap_or(0) > 0;
+
+    if !admin_exists {
+        let admin_id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+        // Default password: admin123 (hashed with bcrypt)
+        let password_hash = bcrypt::hash("admin123", bcrypt::DEFAULT_COST)
+            .expect("Failed to hash default admin password");
+        conn.execute(
+            "INSERT INTO users (id, username, email, password_hash, role, is_active, created_at, updated_at)
+             VALUES (?1, 'admin', 'admin@quickpoint.local', ?2, 'admin', 1, ?3, ?3)",
+            rusqlite::params![admin_id, password_hash, now],
+        )?;
+    }
+
+    set_schema_version(conn, 8)?;
 
     Ok(())
 }

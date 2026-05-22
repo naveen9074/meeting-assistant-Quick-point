@@ -51,9 +51,17 @@ export const transcriptionApi = {
   transcribeAudio: (
     audioPath: string,
     noteId: string,
-    speaker?: string
+    speaker?: string,
+    sessionId?: string | null,
+    audioSegmentId?: string | null
   ): Promise<TranscriptionResult> => {
-    return invoke("transcribe_audio", { audioPath, noteId, speaker });
+    return invoke("transcribe_audio", {
+      audioPath,
+      noteId,
+      speaker,
+      sessionId: sessionId ?? null,
+      audioSegmentId: audioSegmentId ?? null,
+    });
   },
 
   /** Transcribe dual audio files (mic and system) with speaker labels */

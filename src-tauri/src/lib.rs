@@ -3,9 +3,11 @@ mod audio;
 mod commands;
 mod db;
 mod meeting_detection;
+mod models;
 mod transcription;
 
 use commands::{init_transcription_state, AiState, AudioState};
+use commands::sessions as sessions_commands;
 use db::Database;
 use meeting_detection::MeetingDetectionState;
 use serde::Deserialize;
@@ -443,6 +445,24 @@ pub fn run() {
             commands::save_image,
             commands::get_attachments_dir,
             commands::delete_note_attachments,
+            // Auth commands
+            commands::register_user,
+            commands::login_user,
+            commands::logout_user,
+            commands::verify_token,
+            // Admin commands
+            commands::admin_get_users,
+            commands::admin_get_access_requests,
+            commands::admin_approve_request,
+            commands::admin_reject_request,
+            commands::admin_get_system_config,
+            commands::admin_set_system_config,
+            // Sessions commands
+            commands::create_session,
+            commands::get_user_sessions,
+            commands::end_session,
+            commands::admin_get_all_sessions,
+            sessions_commands::log_export,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

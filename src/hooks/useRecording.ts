@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { audioApi } from "../api";
 import { RecordingPhase } from "../types";
+import { useSessionStore } from "../store/useSessionStore";
 
 interface UseRecordingReturn {
   isRecording: boolean;
@@ -18,6 +19,7 @@ interface UseRecordingReturn {
 }
 
 export function useRecording(): UseRecordingReturn {
+  const { activeSessionId } = useSessionStore();
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [recordingPhase, setRecordingPhase] = useState<RecordingPhase>(
@@ -53,7 +55,7 @@ export function useRecording(): UseRecordingReturn {
       } else {
         // Fall back to mic-only recording
         console.log("Starting mic-only recording");
-        const path = await audioApi.startRecording(noteId);
+        const path = await audioApi.startRecording(noteId, activeSessionId);
         setAudioPath(path);
         setIsDualRecording(false);
       }

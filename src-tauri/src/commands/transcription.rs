@@ -274,6 +274,8 @@ pub async fn transcribe_audio(
     audio_path: String,
     note_id: String,
     speaker: Option<String>,
+    session_id: Option<String>,
+    audio_segment_id: Option<String>,
     state: State<'_, TranscriptionState>,
     db: State<'_, Database>,
 ) -> Result<TranscriptionResult, String> {
@@ -313,6 +315,22 @@ pub async fn transcribe_audio(
             db.add_transcript_segment(&note_id, segment.start_time, segment.end_time, &segment.text, speaker.as_deref(), None, None)
                 .map_err(|e| e.to_string())?;
         }
+    }
+
+    // If session_id provided, insert full transcript text into transcripts table
+    if let Some(sid) = session_id {
+        let transcript_text = result.segments.iter()
+            .filter(|s| !should_skip_segment(&s.text))
+            .map(|s| s.text.as_str())
+            .collect::<Vec<_>>()
+            .join(" ");
+        let conn = crate::db::get_connection().map_err(|e| e.to_string())?;
+        let t_id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+        let _ = conn.execute(
+            "INSERT INTO transcripts (id, session_id, audio_segment_id, content, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![t_id, sid, audio_segment_id, &transcript_text, now],
+        );
     }
 
     state.is_transcribing.store(false, Ordering::SeqCst);

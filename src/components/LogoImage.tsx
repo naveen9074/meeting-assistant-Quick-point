@@ -6,7 +6,7 @@ export function LogoImage({ className }: LogoImageProps) {
   return (
     <img
       src="/logo-readme.png"
-      alt="Note67"
+      alt="QuickPoint"
       className={className}
     />
   );

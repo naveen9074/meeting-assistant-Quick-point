@@ -4,7 +4,7 @@ interface LogoIconProps {
 }
 
 /**
- * Note67 app icon - document with audio waveform and "67"
+ * QuickPoint app icon - document with audio waveform and "67"
  */
 export function LogoIcon({ size = 48, className }: LogoIconProps) {
   return (
@@ -56,7 +56,7 @@ interface LogoWithWordmarkProps {
 }
 
 /**
- * Note67 logo with "Note67" wordmark
+ * QuickPoint logo with "QuickPoint" wordmark
  */
 export function LogoWithWordmark({ className }: LogoWithWordmarkProps) {
   return (

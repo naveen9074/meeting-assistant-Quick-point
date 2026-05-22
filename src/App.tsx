@@ -29,6 +29,14 @@ import {
 } from "./hooks";
 import { useThemeStore } from "./stores/themeStore";
 import type { Note, TranscriptSegment, AudioSegment } from "./types";
+import { useAuthStore } from "./store/useAuthStore";
+import { useSessionStore } from "./store/useSessionStore";
+import AuthGuard from "./components/auth/AuthGuard";
+import LoginPage from "./components/auth/LoginPage";
+import RegisterPage from "./components/auth/RegisterPage";
+import AdminDashboard from "./components/admin/AdminDashboard";
+import UserDashboard from "./components/user/UserDashboard";
+import SessionPanel from './components/session/SessionPanel';
 
 function App() {
   const {
@@ -103,6 +111,11 @@ function App() {
       return () => mediaQuery.removeEventListener("change", handleChange);
     }
   }, [theme]);
+
+  const [authScreen, setAuthScreen] = useState<'login' | 'register' | 'app'>('login');
+  const { isAuthenticated, user, token, clearAuth, isAdmin } = useAuthStore();
+  const { activeSessionId } = useSessionStore();
+  const [selectedSection, setSelectedSection] = useState<'notes' | 'admin' | 'my-sessions'>('notes');
 
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -569,8 +582,64 @@ function App() {
     });
   };
 
+  const handleLogout = async () => {
+    if (token) {
+      try { await invoke('logout_user', { token }); } catch {}
+    }
+    clearAuth();
+    setAuthScreen('login');
+  };
+
+  // Show login screen
+  if (authScreen === 'login' && !isAuthenticated) {
+    return (
+      <LoginPage
+        onLoginSuccess={() => setAuthScreen('app')}
+        onGoToRegister={() => setAuthScreen('register')}
+      />
+    );
+  }
+
+  // Show register screen
+  if (authScreen === 'register') {
+    return <RegisterPage onGoToLogin={() => setAuthScreen('login')} />;
+  }
+
   return (
-    <div className="h-screen flex">
+    <AuthGuard onShowLogin={() => setAuthScreen('login')}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+
+        {/* Top bar — user info + logout */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '0 16px', height: '36px', background: '#0a0a0a',
+          borderBottom: '1px solid #1e1e1e', flexShrink: 0
+        }}>
+          <span style={{ fontSize: '12px', color: '#555' }}>
+            QuickPoint
+            {isAdmin() && (
+              <span style={{ marginLeft: '8px', background: '#1e3a5f', color: '#60a5fa', padding: '1px 6px', borderRadius: '3px', fontSize: '10px' }}>
+                ADMIN
+              </span>
+            )}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '11px', color: '#444' }}>{user?.username}</span>
+            <button
+              onClick={handleLogout}
+              style={{
+                background: 'transparent', border: '1px solid #2a2a2a', borderRadius: '3px',
+                color: '#666', padding: '2px 10px', fontSize: '11px', cursor: 'pointer'
+              }}
+            >
+              Logout
+            </button>
+          </div>
+        </div>
+
+        {/* Main content area */}
+        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <div className="h-screen flex" style={{ flex: 1 }}>
       {/* Sidebar */}
       <aside
         className="flex flex-col border-r"
@@ -730,6 +799,62 @@ function App() {
             </div>
           )}
 
+          {/* My Sessions button — for all users */}
+          <button
+            onClick={() => setSelectedSection(selectedSection === 'my-sessions' ? 'notes' : 'my-sessions')}
+            className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-black/5 transition-colors mb-1"
+            style={{
+              backgroundColor: selectedSection === 'my-sessions' ? "var(--color-sidebar-selected)" : "transparent",
+            }}
+          >
+            <div
+              className="w-8 h-8 rounded-full flex items-center justify-center text-sm shrink-0"
+              style={{
+                backgroundColor: "var(--color-sidebar-hover)",
+                color: "var(--color-text-secondary)",
+              }}
+            >
+              📊
+            </div>
+            <div className="flex-1 min-w-0 text-left">
+              <div
+                className="text-sm font-medium truncate"
+                style={{ color: selectedSection === 'my-sessions' ? "var(--color-accent)" : "var(--color-text)" }}
+              >
+                My Sessions
+              </div>
+            </div>
+          </button>
+
+          {/* Admin button — only for admin users */}
+          {isAdmin() && (
+            <button
+              onClick={() => setSelectedSection(selectedSection === 'admin' ? 'notes' : 'admin')}
+              className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-black/5 transition-colors mb-1"
+              style={{
+                backgroundColor: selectedSection === 'admin' ? "var(--color-sidebar-selected)" : "transparent",
+              }}
+            >
+              <div
+                className="w-8 h-8 rounded-full flex items-center justify-center text-sm shrink-0"
+                style={{
+                  backgroundColor: "var(--color-sidebar-hover)",
+                  color: "var(--color-text-secondary)",
+                }}
+              >
+                ⚙
+              </div>
+              <div className="flex-1 min-w-0 text-left">
+                <div
+                  className="text-sm font-medium truncate"
+                  style={{ color: selectedSection === 'admin' ? "var(--color-accent)" : "var(--color-text)" }}
+                >
+                  Admin Dashboard
+                </div>
+              </div>
+            </button>
+          )}
+
           {/* User profile */}
           <button
             onClick={() => {
@@ -818,7 +943,12 @@ function App() {
         className="flex-1 flex flex-col relative"
         style={{ backgroundColor: "var(--color-bg)" }}
       >
-        {selectedNote ? (
+        <SessionPanel />
+        {selectedSection === 'my-sessions' ? (
+          <UserDashboard />
+        ) : selectedSection === 'admin' && isAdmin() ? (
+          <AdminDashboard />
+        ) : selectedNote ? (
           <NoteView
             key={selectedNote.id}
             note={selectedNote}
@@ -899,7 +1029,19 @@ function App() {
             onExport={async () => {
               try {
                 const data = await exportApi.exportMarkdown(selectedNote.id);
-                await exportApi.savePdfWithDialog(data.markdown, data.filename);
+                const filePath = await exportApi.savePdfWithDialog(data.markdown, data.filename);
+                if (filePath) {
+                  try {
+                    await invoke("log_export", {
+                      userId: user?.id ?? null,
+                      sessionId: activeSessionId ?? null,
+                      exportFormat: "pdf",
+                      filePath: filePath,
+                    });
+                  } catch (err) {
+                    console.error("Failed to log export:", err);
+                  }
+                }
               } catch (error) {
                 console.error("Export failed:", error);
               }
@@ -1100,6 +1242,9 @@ function App() {
       {/* Meeting Detected Popup */}
       <MeetingDetectedPopup onStartListening={handleStartRecording} />
     </div>
+        </div>{/* end main content flex row */}
+      </div>{/* end outer column flex */}
+    </AuthGuard>
   );
 }
 

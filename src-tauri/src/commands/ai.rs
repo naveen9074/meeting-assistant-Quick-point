@@ -166,6 +166,8 @@ pub async fn generate_summary(
     note_id: String,
     summary_type: String,
     custom_prompt: Option<String>,
+    session_id: Option<String>,
+    transcript_id: Option<String>,
     ai_state: State<'_, AiState>,
     db: State<'_, Database>,
 ) -> Result<Summary, String> {
@@ -318,6 +320,17 @@ pub async fn generate_summary(
     let summary_id = db
         .add_summary(&note_id, &stype, &clean_response)
         .map_err(|e| e.to_string())?;
+
+    // If session_id provided, insert into interview summaries table
+    if let Some(sid) = session_id {
+        let conn = crate::db::get_connection().map_err(|e| e.to_string())?;
+        let s_id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+        let _ = conn.execute(
+            "INSERT INTO summaries (id, session_id, transcript_id, content, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![s_id, sid, transcript_id, &clean_response, now],
+        );
+    }
 
     // Fetch the saved summary
     let summary = db

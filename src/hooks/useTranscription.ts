@@ -9,6 +9,7 @@ import type {
   TranscriptSegment,
   TranscriptionResult,
 } from "../types";
+import { useSessionStore } from "../store/useSessionStore";
 
 interface TranscriptionUpdateEvent {
   note_id: string;
@@ -82,6 +83,7 @@ interface UseTranscriptionReturn {
 }
 
 export function useTranscription(): UseTranscriptionReturn {
+  const { activeSessionId } = useSessionStore();
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [transcript, setTranscript] = useState<TranscriptSegment[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -91,7 +93,7 @@ export function useTranscription(): UseTranscriptionReturn {
       try {
         setError(null);
         setIsTranscribing(true);
-        const result = await transcriptionApi.transcribeAudio(audioPath, noteId);
+        const result = await transcriptionApi.transcribeAudio(audioPath, noteId, undefined, activeSessionId);
         // Convert result segments to TranscriptSegment format
         const segments: TranscriptSegment[] = result.segments.map((s, idx) => ({
           id: idx,

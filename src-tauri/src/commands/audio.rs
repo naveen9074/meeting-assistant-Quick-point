@@ -49,6 +49,7 @@ pub fn start_recording(
     app: AppHandle,
     state: State<AudioState>,
     note_id: String,
+    session_id: Option<String>,
 ) -> Result<String, String> {
     // Get app data directory for storing recordings
     let app_data_dir = app
@@ -65,7 +66,19 @@ pub fn start_recording(
     audio::start_recording(state.recording.clone(), output_path.clone())
         .map_err(|e| e.to_string())?;
 
-    Ok(output_path.to_string_lossy().to_string())
+    let file_path = output_path.to_string_lossy().to_string();
+
+    if let Some(sid) = session_id {
+        let conn = crate::db::get_connection().map_err(|e| e.to_string())?;
+        let seg_id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+        let _ = conn.execute(
+            "INSERT INTO audio_segments (id, session_id, file_path, recorded_at) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![seg_id, sid, &file_path, now],
+        );
+    }
+
+    Ok(file_path)
 }
 
 #[tauri::command]
@@ -224,6 +237,7 @@ pub fn start_dual_recording(
     app: AppHandle,
     state: State<AudioState>,
     note_id: String,
+    session_id: Option<String>,
 ) -> Result<DualRecordingResult, String> {
     // Get app data directory for storing recordings
     let app_data_dir = app
@@ -268,8 +282,20 @@ pub fn start_dual_recording(
         }
     };
 
+    let file_path = mic_path.to_string_lossy().to_string();
+
+    if let Some(sid) = session_id {
+        let conn = crate::db::get_connection().map_err(|e| e.to_string())?;
+        let seg_id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339();
+        let _ = conn.execute(
+            "INSERT INTO audio_segments (id, session_id, file_path, recorded_at) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![seg_id, sid, &file_path, now],
+        );
+    }
+
     Ok(DualRecordingResult {
-        mic_path: mic_path.to_string_lossy().to_string(),
+        mic_path: file_path,
         system_path: if system_started {
             Some(system_path.to_string_lossy().to_string())
         } else {

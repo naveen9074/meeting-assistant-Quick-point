@@ -3,6 +3,7 @@ import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { aiApi } from "../api";
 import { useOllamaStore } from "../stores/ollamaStore";
 import type { Summary, SummaryType } from "../types";
+import { useSessionStore } from "../store/useSessionStore";
 
 interface SummaryStreamEvent {
   note_id: string;
@@ -37,6 +38,7 @@ export function useOllama() {
 }
 
 export function useSummaries(noteId: string | null, refreshKey: number = 0) {
+  const { activeSessionId } = useSessionStore();
   const [summaries, setSummaries] = useState<Summary[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [streamingContent, setStreamingContent] = useState<string>("");
@@ -108,7 +110,8 @@ export function useSummaries(noteId: string | null, refreshKey: number = 0) {
         const summary = await aiApi.generateSummaryStream(
           noteId,
           summaryType,
-          customPrompt
+          customPrompt,
+          activeSessionId
         );
         setSummaries((prev) => [summary, ...prev]);
         setStreamingContent("");

@@ -27,12 +27,16 @@ export const aiApi = {
   generateSummary: (
     noteId: string,
     summaryType: SummaryType,
-    customPrompt?: string
+    customPrompt?: string,
+    sessionId?: string | null,
+    transcriptId?: string | null
   ): Promise<Summary> => {
     return invoke("generate_summary", {
       noteId,
       summaryType,
       customPrompt: customPrompt ?? null,
+      sessionId: sessionId ?? null,
+      transcriptId: transcriptId ?? null,
     });
   },
 
@@ -40,12 +44,16 @@ export const aiApi = {
   generateSummaryStream: (
     noteId: string,
     summaryType: SummaryType,
-    customPrompt?: string
+    customPrompt?: string,
+    sessionId?: string | null,
+    transcriptId?: string | null
   ): Promise<Summary> => {
     return invoke("generate_summary_stream", {
       noteId,
       summaryType,
       customPrompt: customPrompt ?? null,
+      sessionId: sessionId ?? null,
+      transcriptId: transcriptId ?? null,
     });
   },
 

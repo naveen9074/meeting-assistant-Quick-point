@@ -63,7 +63,20 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
   --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.1);
 
-  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  /* QuickPoint Variables */
+  --qp-primary: #6366f1;
+  --qp-primary-hover: #4f46e5;
+  --qp-primary-light: rgba(99, 102, 241, 0.1);
+  --qp-secondary: #06b6d4;
+  --qp-success: #10b981;
+  --qp-warning: #f59e0b;
+  --qp-danger: #ef4444;
+  --qp-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --qp-border-radius: 12px;
+  --qp-transition-fast: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --qp-transition-normal: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  font-family: var(--qp-font-sans);
   font-size: 14px;
   line-height: 1.5;
   color: var(--color-text);
@@ -90,12 +103,54 @@
   --color-accent-light: rgba(240, 100, 73, 0.15);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 10px 25px rgba(0, 0, 0, 0.4);
+
+  /* QuickPoint Variables */
+  --qp-primary: #818cf8;
+  --qp-primary-hover: #6366f1;
+  --qp-primary-light: rgba(129, 140, 248, 0.15);
+  --qp-secondary: #22d3ee;
+}
+
+/* QuickPoint Overrides */
+::selection {
+  background-color: rgba(99, 102, 241, 0.3);
+  color: inherit;
+}
+
+:root.dark ::selection {
+  background-color: rgba(129, 140, 248, 0.4);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.5);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(156, 163, 175, 0.8);
 }
 
 :root.dark ::-webkit-scrollbar-thumb {
-  background: #4a4a4a;
+  background: rgba(156, 163, 175, 0.3);
 }
 
 :root.dark ::-webkit-scrollbar-thumb:hover {
-  background: #5a5a5a;
+  background: rgba(156, 163, 175, 0.5);
 }
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--qp-font-sans);
+}
+
