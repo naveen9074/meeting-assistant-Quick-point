@@ -116,7 +116,7 @@ When using speakers instead of headphones, your microphone picks up audio from y
 
 - [Node.js](https://nodejs.org/) (v18+)
 - [Rust](https://rust-lang.org/)
-- [Ollama](https://ollama.ai/) (for AI summaries)
+- [Ollama](://ollama.ai/https) (for AI summaries)
 
 ```bash
 # Install Rust
