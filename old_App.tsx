@@ -204,7 +204,6 @@ function App() {
 
   const handleNewNote = useCallback(async () => {
     const note = await createNote("Untitled");
-    setSelectedSection("notes");
     setSelectedNoteId(note.id);
   }, [createNote]);
 
@@ -218,7 +217,6 @@ function App() {
     }
 
     const note = await createNote("Untitled");
-    setSelectedSection("notes");
     setSelectedNoteId(note.id);
     setRecordingNoteId(note.id);
     setActiveTab("transcript");
@@ -548,7 +546,6 @@ function App() {
   };
 
   const handleSelectNote = async (note: Note) => {
-    setSelectedSection("notes");
     setSelectedNoteId(note.id);
     setActiveTab("summary");
     if (!noteTranscripts[note.id]) {
@@ -642,6 +639,7 @@ function App() {
 
         {/* Main content area */}
         <div style={{ display: 'flex', flex: 1, overflow: 'hidden', width: '100%' }}>
+        <div className="h-screen flex" style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
       {/* Sidebar */}
       <aside
         className="flex flex-col border-r overflow-hidden"
@@ -1246,6 +1244,7 @@ function App() {
 
       {/* Meeting Detected Popup */}
       <MeetingDetectedPopup onStartListening={handleStartRecording} />
+    </div>
         </div>{/* end main content flex row */}
       </div>{/* end outer column flex */}
     </AuthGuard>

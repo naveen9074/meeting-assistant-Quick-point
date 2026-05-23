@@ -115,7 +115,7 @@ export function ProfileTab() {
           className="mt-1.5 text-xs"
           style={{ color: "var(--color-text-tertiary)" }}
         >
-          Used for receiving Note67 updates and other new app announcements.
+          Used for receiving QuickPoint updates and other new app announcements.
           Will be used to signup for my newsletter. No need to signup if you do
           not feel like it.
         </p>

@@ -115,7 +115,7 @@ export function useTranscription(): UseTranscriptionReturn {
         setIsTranscribing(false);
       }
     },
-    [activeSessionId]
+    []
   );
 
   const transcribeDual = useCallback(

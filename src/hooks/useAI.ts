@@ -125,7 +125,7 @@ export function useSummaries(noteId: string | null, refreshKey: number = 0) {
         currentNoteIdRef.current = null;
       }
     },
-    [noteId]
+    [noteId, activeSessionId]
   );
 
   const deleteSummary = useCallback(async (summaryId: number) => {

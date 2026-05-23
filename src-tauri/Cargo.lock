@@ -2637,48 +2637,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "note67"
-version = "0.1.19"
-dependencies = [
- "anyhow",
- "bcrypt",
- "block2",
- "chrono",
- "core-foundation 0.10.1",
- "core-graphics",
- "cpal",
- "dispatch",
- "futures-util",
- "hound",
- "objc2",
- "objc2-app-kit",
- "objc2-core-audio-types",
- "objc2-core-media",
- "objc2-foundation",
- "reqwest",
- "ringbuf",
- "rusqlite",
- "scopeguard",
- "serde",
- "serde_json",
- "symphonia",
- "tauri",
- "tauri-build",
- "tauri-plugin-autostart",
- "tauri-plugin-clipboard-manager",
- "tauri-plugin-dialog",
- "tauri-plugin-fs",
- "tauri-plugin-process",
- "tauri-plugin-shell",
- "tauri-plugin-updater",
- "thiserror 2.0.17",
- "tokio",
- "uuid",
- "wasapi",
- "whisper-rs",
-]
-
-[[package]]
 name = "num-conv"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3544,6 +3502,48 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b66c2058c55a409d601666cffe35f04333cf1013010882cec174a7467cd4e21c"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "quickpoint"
+version = "0.1.19"
+dependencies = [
+ "anyhow",
+ "bcrypt",
+ "block2",
+ "chrono",
+ "core-foundation 0.10.1",
+ "core-graphics",
+ "cpal",
+ "dispatch",
+ "futures-util",
+ "hound",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-core-audio-types",
+ "objc2-core-media",
+ "objc2-foundation",
+ "reqwest",
+ "ringbuf",
+ "rusqlite",
+ "scopeguard",
+ "serde",
+ "serde_json",
+ "symphonia",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-autostart",
+ "tauri-plugin-clipboard-manager",
+ "tauri-plugin-dialog",
+ "tauri-plugin-fs",
+ "tauri-plugin-process",
+ "tauri-plugin-shell",
+ "tauri-plugin-updater",
+ "thiserror 2.0.17",
+ "tokio",
+ "uuid",
+ "wasapi",
+ "whisper-rs",
 ]
 
 [[package]]

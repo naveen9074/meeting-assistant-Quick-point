@@ -120,3 +120,68 @@ pub async fn log_export(
     Ok(())
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SessionTranscript {
+    pub id: String,
+    pub session_id: String,
+    pub audio_segment_id: Option<String>,
+    pub text: String,
+    pub language: Option<String>,
+    pub created_at: String,
+    pub speaker: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SessionSummary {
+    pub id: String,
+    pub session_id: String,
+    pub transcript_id: Option<String>,
+    pub content: String,
+    pub model_used: Option<String>,
+    pub created_at: String,
+}
+
+#[tauri::command]
+pub async fn get_session_transcripts(session_id: String) -> Result<Vec<SessionTranscript>, String> {
+    let conn = get_connection().map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(
+        "SELECT id, session_id, audio_segment_id, content, language, created_at FROM interview_transcripts WHERE session_id = ?1 ORDER BY created_at ASC"
+    ).map_err(|e| e.to_string())?;
+
+    let transcripts = stmt.query_map(rusqlite::params![session_id], |row| Ok(SessionTranscript {
+        id: row.get(0)?,
+        session_id: row.get(1)?,
+        audio_segment_id: row.get(2)?,
+        text: row.get(3)?,
+        language: row.get(4)?,
+        created_at: row.get(5)?,
+        speaker: None,
+    })).map_err(|e| e.to_string())?
+    .filter_map(|r| r.ok())
+    .collect();
+
+    Ok(transcripts)
+}
+
+#[tauri::command]
+pub async fn get_session_summaries(session_id: String) -> Result<Vec<SessionSummary>, String> {
+    let conn = get_connection().map_err(|e| e.to_string())?;
+    let mut stmt = conn.prepare(
+        "SELECT id, session_id, transcript_id, content, model_used, created_at FROM interview_summaries WHERE session_id = ?1 ORDER BY created_at DESC"
+    ).map_err(|e| e.to_string())?;
+
+    let summaries = stmt.query_map(rusqlite::params![session_id], |row| Ok(SessionSummary {
+        id: row.get(0)?,
+        session_id: row.get(1)?,
+        transcript_id: row.get(2)?,
+        content: row.get(3)?,
+        model_used: row.get(4)?,
+        created_at: row.get(5)?,
+    })).map_err(|e| e.to_string())?
+    .filter_map(|r| r.ok())
+    .collect();
+
+    Ok(summaries)
+}
+
+
