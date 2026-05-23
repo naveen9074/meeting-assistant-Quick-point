@@ -63,7 +63,7 @@ export function useRecording(): UseRecordingReturn {
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [activeSessionId]);
+  }, []);
 
   const stopRecording = useCallback(
     async (noteId?: string): Promise<string | null> => {
