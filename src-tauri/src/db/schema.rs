@@ -1,7 +1,7 @@
 use rusqlite::Connection;
 
 #[allow(dead_code)]
-pub const SCHEMA_VERSION: i32 = 8;
+pub const SCHEMA_VERSION: i32 = 9;
 
 pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
     let version = get_schema_version(conn)?;
@@ -29,6 +29,9 @@ pub fn run_migrations(conn: &Connection) -> rusqlite::Result<()> {
     }
     if version < 8 {
         migrate_v8(conn)?;
+    }
+    if version < 9 {
+        migrate_v9(conn)?;
     }
 
     Ok(())
@@ -444,6 +447,24 @@ fn migrate_v8(conn: &Connection) -> rusqlite::Result<()> {
     }
 
     set_schema_version(conn, 8)?;
+
+    Ok(())
+}
+
+fn migrate_v9(conn: &Connection) -> rusqlite::Result<()> {
+    // Add session_id column to notes table
+    let _ = conn.execute(
+        "ALTER TABLE notes ADD COLUMN session_id TEXT",
+        [],
+    );
+
+    // Add speaker column to interview_transcripts table
+    let _ = conn.execute(
+        "ALTER TABLE interview_transcripts ADD COLUMN speaker TEXT",
+        [],
+    );
+
+    set_schema_version(conn, 9)?;
 
     Ok(())
 }

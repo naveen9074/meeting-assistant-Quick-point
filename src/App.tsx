@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import {
-  LogoImage,
   Settings,
   SummaryPanel,
   TranscriptSearch,
@@ -36,7 +35,7 @@ import LoginPage from "./components/auth/LoginPage";
 import RegisterPage from "./components/auth/RegisterPage";
 import AdminDashboard from "./components/admin/AdminDashboard";
 import UserDashboard from "./components/user/UserDashboard";
-import SessionPanel from './components/session/SessionPanel';
+import SessionPanel from "./components/session/SessionPanel";
 
 function App() {
   const {
@@ -112,10 +111,14 @@ function App() {
     }
   }, [theme]);
 
-  const [authScreen, setAuthScreen] = useState<'login' | 'register' | 'app'>('login');
+  const [authScreen, setAuthScreen] = useState<"login" | "register" | "app">(
+    "login"
+  );
   const { isAuthenticated, user, token, clearAuth, isAdmin } = useAuthStore();
   const { activeSessionId } = useSessionStore();
-  const [selectedSection, setSelectedSection] = useState<'notes' | 'admin' | 'my-sessions'>('notes');
+  const [selectedSection, setSelectedSection] = useState<
+    "notes" | "admin" | "my-sessions"
+  >("notes");
 
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
@@ -142,10 +145,16 @@ function App() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [noteToDelete, setNoteToDelete] = useState<Note | null>(null);
   const [recordingNoteId, setRecordingNoteId] = useState<string | null>(null);
+  // Setter only — retranscribingNoteId tracked for future NoteView banner
+  const [, setRetranscribingNoteId] = useState<string | null>(null);
   const [isGeneratingSummaryTitle, setIsGeneratingSummaryTitle] =
     useState(false);
   const [summariesRefreshKey, setSummariesRefreshKey] = useState(0);
   const [showAISidebar, setShowAISidebar] = useState(false);
+
+  // Inline rename state
+  const [renamingNoteId, setRenamingNoteId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   // Context menu state
   const [contextMenu, setContextMenu] = useState<{
@@ -428,6 +437,14 @@ function App() {
         setNoteToDelete(note);
         setShowDeleteConfirm(true);
       }
+    } else if (action === "rename" && contextMenu?.noteId) {
+      const note = notes.find((n) => n.id === contextMenu.noteId);
+      if (note) {
+        setRenamingNoteId(note.id);
+        setRenameValue(note.title);
+        setSelectedNoteId(note.id);
+        setSelectedSection("notes");
+      }
     } else if (action === "settings") {
       setSettingsTab("about");
       setShowSettings(true);
@@ -470,7 +487,10 @@ function App() {
 
       // Auto-retranscribe for better quality (runs in background)
       if (loadedModel) {
-        console.log("[handleStopRecording] Starting auto-retranscribe for better quality");
+        console.log(
+          "[handleStopRecording] Starting auto-retranscribe for better quality"
+        );
+        setRetranscribingNoteId(noteId);
         try {
           await transcriptionApi.retranscribeNote(noteId);
           // Reload transcript with improved results
@@ -482,10 +502,15 @@ function App() {
               [noteId]: improvedSegments,
             }));
           }
-          console.log("[handleStopRecording] Auto-retranscribe complete, segments:", improvedSegments.length);
+          console.log(
+            "[handleStopRecording] Auto-retranscribe complete, segments:",
+            improvedSegments.length
+          );
         } catch (error) {
           console.error("Auto-retranscribe failed:", error);
           // Continue with live transcript if retranscribe fails
+        } finally {
+          setRetranscribingNoteId(null);
         }
       }
 
@@ -569,6 +594,15 @@ function App() {
     setEditingTitle(false);
   };
 
+  const handleRenameCommit = async (noteId: string) => {
+    if (renameValue.trim()) {
+      await updateNote(noteId, { title: renameValue.trim() });
+      await refreshNotes();
+    }
+    setRenamingNoteId(null);
+    setRenameValue("");
+  };
+
   const handleUpdateDescription = async (description: string) => {
     if (selectedNote) {
       await updateNote(selectedNote.id, {
@@ -587,667 +621,798 @@ function App() {
 
   const handleLogout = async () => {
     if (token) {
-      try { await invoke('logout_user', { token }); } catch {}
+      try {
+        await invoke("logout_user", { token });
+      } catch {}
     }
     clearAuth();
-    setAuthScreen('login');
+    setAuthScreen("login");
   };
 
   // Show login screen
-  if (authScreen === 'login' && !isAuthenticated) {
+  if (authScreen === "login" && !isAuthenticated) {
     return (
       <LoginPage
-        onLoginSuccess={() => setAuthScreen('app')}
-        onGoToRegister={() => setAuthScreen('register')}
+        onLoginSuccess={() => setAuthScreen("app")}
+        onGoToRegister={() => setAuthScreen("register")}
       />
     );
   }
 
   // Show register screen
-  if (authScreen === 'register') {
-    return <RegisterPage onGoToLogin={() => setAuthScreen('login')} />;
+  if (authScreen === "register") {
+    return <RegisterPage onGoToLogin={() => setAuthScreen("login")} />;
   }
 
   return (
-    <AuthGuard onShowLogin={() => setAuthScreen('login')}>
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100%' }}>
-
+    <AuthGuard onShowLogin={() => setAuthScreen("login")}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          height: "100vh",
+          width: "100%",
+        }}
+      >
         {/* Top bar — user info + logout */}
-        <div style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '0 16px', height: '36px', background: '#0a0a0a',
-          borderBottom: '1px solid #1e1e1e', flexShrink: 0
-        }}>
-          <span style={{ fontSize: '12px', color: '#555' }}>
-            QuickPoint
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            padding: "0 16px",
+            height: "38px",
+            background: "var(--color-sidebar)",
+            borderBottom: "1px solid var(--color-border)",
+            flexShrink: 0,
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <img
+              src="/qlogo.png"
+              alt="QP"
+              style={{ width: 18, height: 18, borderRadius: 4 }}
+            />
+            <span
+              style={{
+                fontSize: "12px",
+                fontWeight: 600,
+                color: "var(--color-accent)",
+              }}
+            >
+              QuickPoint
+            </span>
             {isAdmin() && (
-              <span style={{ marginLeft: '8px', background: '#1e3a5f', color: '#60a5fa', padding: '1px 6px', borderRadius: '3px', fontSize: '10px' }}>
+              <span
+                style={{
+                  background: "var(--color-accent-light)",
+                  color: "var(--color-accent)",
+                  padding: "1px 7px",
+                  borderRadius: "20px",
+                  fontSize: "10px",
+                  fontWeight: 600,
+                  letterSpacing: "0.5px",
+                }}
+              >
                 ADMIN
               </span>
             )}
-          </span>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ fontSize: '11px', color: '#444' }}>{user?.username}</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <span
+              style={{
+                fontSize: "11px",
+                color: "var(--color-text-secondary)",
+                background:
+                  "var(--color-bg-subtle, var(--color-sidebar-hover))",
+                padding: "2px 8px",
+                borderRadius: "4px",
+              }}
+            >
+              {user?.username}
+            </span>
             <button
               onClick={handleLogout}
               style={{
-                background: 'transparent', border: '1px solid #2a2a2a', borderRadius: '3px',
-                color: '#666', padding: '2px 10px', fontSize: '11px', cursor: 'pointer'
+                background: "transparent",
+                border: "1px solid var(--color-border)",
+                borderRadius: "6px",
+                color: "var(--color-text-tertiary)",
+                padding: "3px 10px",
+                fontSize: "11px",
+                cursor: "pointer",
+                transition: "all 0.15s ease",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor =
+                  "var(--color-accent)";
+                (e.currentTarget as HTMLButtonElement).style.color =
+                  "var(--color-accent)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.borderColor =
+                  "var(--color-border)";
+                (e.currentTarget as HTMLButtonElement).style.color =
+                  "var(--color-text-tertiary)";
               }}
             >
-              Logout
+              Sign out
             </button>
           </div>
         </div>
 
         {/* Main content area */}
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden', width: '100%' }}>
-      {/* Sidebar */}
-      <aside
-        className="flex flex-col border-r overflow-hidden"
-        style={{
-          width: "var(--sidebar-width)",
-          backgroundColor: "var(--color-sidebar)",
-          borderColor: "var(--color-border)",
-          display: 'flex',
-          flexDirection: 'column',
-          height: '100%',
-        }}
-      >
-        {/* Sidebar Header */}
-        <div className="px-4 py-3 flex items-center justify-between flex-shrink-0">
-          <span
-            className="text-base font-semibold"
-            style={{ color: "var(--color-text)" }}
-          >
-            Notes
-          </span>
-          <button
-            onClick={handleNewNote}
-            className="p-2 rounded-lg hover:bg-black/5 transition-colors"
-            title="New Note (⌘N)"
-          >
-            <svg
-              className="w-4 h-4"
-              style={{ color: "var(--color-text-secondary)" }}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={1.5}
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-          </button>
-        </div>
-
-        {/* Note List */}
-        <div className="flex-1 overflow-y-auto min-h-0">
-          {loading ? (
-            <div
-              className="px-4 py-6 text-center text-sm"
-              style={{ color: "var(--color-text-secondary)" }}
-            >
-              Loading...
-            </div>
-          ) : groupedNotes.length === 0 ? (
-            <div
-              className="px-4 py-8 text-center text-sm"
-              style={{ color: "var(--color-text-secondary)" }}
-            >
-              <p className="mb-3">No notes yet</p>
-              <button
-                onClick={async () => {
-                  const { seedNotes } = await import("./utils/seeder");
-                  await seedNotes(refreshNotes);
-                }}
-                className="text-xs underline"
-                style={{ color: "var(--color-accent)" }}
-              >
-                Add sample data
-              </button>
-            </div>
-          ) : (
-            groupedNotes.map((group) => (
-              <div key={group.label} className="mb-1">
-                <div
-                  className="px-4 py-1.5 text-xs font-medium uppercase tracking-wider"
-                  style={{ color: "var(--color-text-secondary)" }}
-                >
-                  {group.label}
-                </div>
-                {group.notes.map((note) => (
-                  <button
-                    key={note.id}
-                    data-note-id={note.id}
-                    onClick={() => handleSelectNote(note)}
-                    onContextMenu={(e) => handleNoteContextMenu(e, note)}
-                    className="w-full px-4 py-2 text-left transition-colors"
-                    style={{
-                      backgroundColor:
-                        selectedNoteId === note.id
-                          ? "var(--color-sidebar-selected)"
-                          : "transparent",
-                    }}
-                    onMouseEnter={(e) => {
-                      if (selectedNoteId !== note.id) {
-                        e.currentTarget.style.backgroundColor =
-                          "var(--color-sidebar-hover)";
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (selectedNoteId !== note.id) {
-                        e.currentTarget.style.backgroundColor = "transparent";
-                      }
-                    }}
-                  >
-                    <div
-                      className="text-sm font-medium truncate"
-                      style={{ color: "var(--color-text)" }}
-                    >
-                      {note.title}
-                    </div>
-                    <div
-                      className="text-xs"
-                      style={{ color: "var(--color-text-secondary)" }}
-                    >
-                      {formatTime(note.started_at)}
-                      {isRecording && recordingNoteId === note.id && (
-                        <span
-                          className="ml-2 px-1.5 py-0.5 rounded text-xs font-medium"
-                          style={{
-                            backgroundColor: "var(--color-accent-light)",
-                            color: "var(--color-accent)",
-                          }}
-                        >
-                          Live
-                        </span>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Sidebar Footer */}
         <div
-          className="px-3 py-2.5 border-t"
-          style={{ borderColor: "var(--color-border)" }}
+          style={{
+            display: "flex",
+            flex: 1,
+            overflow: "hidden",
+            width: "100%",
+          }}
         >
-          {/* Model badges */}
-          {(loadedModel || (ollamaRunning && ollamaModel)) && (
-            <div
-              className="flex flex-wrap items-center gap-1.5 text-xs mb-2"
-              style={{ color: "var(--color-text-secondary)" }}
-            >
-              {loadedModel && (
-                <span
-                  className="px-1.5 py-0.5 rounded"
-                  style={{ backgroundColor: "var(--color-sidebar-hover)" }}
-                >
-                  {loadedModel}
-                </span>
-              )}
-              {ollamaRunning && ollamaModel && (
-                <span
-                  className="px-1.5 py-0.5 rounded"
-                  style={{ backgroundColor: "var(--color-sidebar-hover)" }}
-                >
-                  {ollamaModel.split(":")[0]}
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* My Sessions button — for all users */}
-          <button
-            onClick={() => setSelectedSection(selectedSection === 'my-sessions' ? 'notes' : 'my-sessions')}
-            className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-black/5 transition-colors mb-1"
+          {/* Sidebar */}
+          <aside
+            className="flex flex-col border-r overflow-hidden"
             style={{
-              backgroundColor: selectedSection === 'my-sessions' ? "var(--color-sidebar-selected)" : "transparent",
+              width: "var(--sidebar-width)",
+              backgroundColor: "var(--color-sidebar)",
+              borderColor: "var(--color-border)",
+              display: "flex",
+              flexDirection: "column",
+              height: "100%",
             }}
           >
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-sm shrink-0"
-              style={{
-                backgroundColor: "var(--color-sidebar-hover)",
-                color: "var(--color-text-secondary)",
-              }}
-            >
-              📊
-            </div>
-            <div className="flex-1 min-w-0 text-left">
-              <div
-                className="text-sm font-medium truncate"
-                style={{ color: selectedSection === 'my-sessions' ? "var(--color-accent)" : "var(--color-text)" }}
-              >
-                My Sessions
-              </div>
-            </div>
-          </button>
-
-          {/* Admin button — only for admin users */}
-          {isAdmin() && (
-            <button
-              onClick={() => setSelectedSection(selectedSection === 'admin' ? 'notes' : 'admin')}
-              className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-black/5 transition-colors mb-1"
-              style={{
-                backgroundColor: selectedSection === 'admin' ? "var(--color-sidebar-selected)" : "transparent",
-              }}
-            >
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center text-sm shrink-0"
-                style={{
-                  backgroundColor: "var(--color-sidebar-hover)",
-                  color: "var(--color-text-secondary)",
-                }}
-              >
-                ⚙
-              </div>
-              <div className="flex-1 min-w-0 text-left">
-                <div
-                  className="text-sm font-medium truncate"
-                  style={{ color: selectedSection === 'admin' ? "var(--color-accent)" : "var(--color-text)" }}
-                >
-                  Admin Dashboard
-                </div>
-              </div>
-            </button>
-          )}
-
-          {/* User profile */}
-          <button
-            onClick={() => {
-              setSettingsTab("about");
-              setShowSettings(true);
-            }}
-            className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-black/5 transition-colors"
-          >
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-sm shrink-0"
-              style={{
-                backgroundColor: profile.avatar
-                  ? "var(--color-accent-light)"
-                  : "var(--color-sidebar-hover)",
-                color: profile.avatar
-                  ? "var(--color-text)"
-                  : "var(--color-text-secondary)",
-              }}
-            >
-              {profile.avatar ||
-                (profile.name ? profile.name[0].toUpperCase() : "?")}
-            </div>
-            <div className="flex-1 min-w-0 text-left">
-              <div
-                className="text-sm font-medium truncate"
+            {/* Sidebar Header */}
+            <div className="px-4 py-3 flex items-center justify-between flex-shrink-0">
+              <span
+                className="text-base font-semibold"
                 style={{ color: "var(--color-text)" }}
               >
-                {profile.name || "Set up profile"}
-              </div>
-              {profile.email && (
-                <div
-                  className="text-xs truncate"
-                  style={{ color: "var(--color-text-secondary)" }}
-                >
-                  {profile.email}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              {(!profile.name ||
-                !loadedModel ||
-                !ollamaRunning ||
-                !ollamaModel ||
-                updateAvailable ||
-                systemNeedsSetup) && (
+                Notes
+              </span>
+              <button
+                onClick={handleNewNote}
+                className="p-2 rounded-lg hover:bg-black/5 transition-colors"
+                title="New Note (⌘N)"
+              >
                 <svg
-                  className="w-4 h-4 mt-0.5"
-                  style={{ color: "#f59e0b" }}
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
+                  className="w-4 h-4"
+                  style={{ color: "var(--color-text-secondary)" }}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
                 >
                   <path
-                    fillRule="evenodd"
-                    d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                    clipRule="evenodd"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M12 4v16m8-8H4"
                   />
                 </svg>
-              )}
-              <svg
-                className="w-6 h-6"
-                style={{ color: "var(--color-text-tertiary)" }}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-              </svg>
+              </button>
             </div>
-          </button>
-        </div>
-      </aside>
 
-      {/* Main Content */}
-      <main
-        className="flex-1 flex flex-col relative overflow-hidden"
-        style={{ backgroundColor: "var(--color-bg)", minHeight: 0 }}
-      >
-        <SessionPanel />
-        {selectedSection === 'my-sessions' ? (
-          <UserDashboard />
-        ) : selectedSection === 'admin' && isAdmin() ? (
-          <AdminDashboard />
-        ) : selectedNote ? (
-          <NoteView
-            key={selectedNote.id}
-            note={selectedNote}
-            transcript={currentTranscript}
-            isRecording={isRecording && recordingNoteId === selectedNote.id}
-            isPaused={isPaused && recordingNoteId === selectedNote.id}
-            audioLevel={audioLevel}
-            activeTab={activeTab}
-            editingTitle={editingTitle}
-            ollamaRunning={ollamaRunning}
-            hasOllamaModel={!!ollamaModel}
-            isRegenerating={isGeneratingSummaryTitle}
-            isTranscribing={
-              isLiveTranscribing && recordingNoteId === selectedNote.id
-            }
-            summariesRefreshKey={summariesRefreshKey}
-            loadedModel={loadedModel}
-            onTabChange={setActiveTab}
-            onEditTitle={() => setEditingTitle(true)}
-            onUpdateTitle={handleUpdateTitle}
-            onUpdateDescription={handleUpdateDescription}
-            onStopRecording={handleStopRecording}
-            onPauseRecording={async () => {
-              try {
-                await pauseRecording();
-              } catch (error) {
-                console.error("Pause recording failed:", error);
-              }
-            }}
-            onResumeRecording={async () => {
-              try {
-                // Check microphone permission before resuming
-                const status = await refreshSystemStatus();
-                if (!status.micAvailable || !status.micPermission) {
-                  setSettingsTab("system");
+            {/* Note List */}
+            <div className="flex-1 overflow-y-auto min-h-0">
+              {loading ? (
+                <div
+                  className="px-4 py-6 text-center text-sm"
+                  style={{ color: "var(--color-text-secondary)" }}
+                >
+                  Loading...
+                </div>
+              ) : groupedNotes.length === 0 ? (
+                <div
+                  className="px-4 py-8 text-center text-sm"
+                  style={{ color: "var(--color-text-secondary)" }}
+                >
+                  <p className="mb-3">No notes yet</p>
+                  <button
+                    onClick={async () => {
+                      const { seedNotes } = await import("./utils/seeder");
+                      await seedNotes(refreshNotes);
+                    }}
+                    className="text-xs underline"
+                    style={{ color: "var(--color-accent)" }}
+                  >
+                    Add sample data
+                  </button>
+                </div>
+              ) : (
+                groupedNotes.map((group) => (
+                  <div key={group.label} className="mb-1">
+                    <div
+                      className="px-4 py-1.5 text-xs font-medium uppercase tracking-wider"
+                      style={{ color: "var(--color-text-secondary)" }}
+                    >
+                      {group.label}
+                    </div>
+                    {group.notes.map((note) => (
+                      <button
+                        key={note.id}
+                        data-note-id={note.id}
+                        onClick={() => handleSelectNote(note)}
+                        onContextMenu={(e) => handleNoteContextMenu(e, note)}
+                        className="w-full px-4 py-2 text-left transition-colors"
+                        style={{
+                          backgroundColor:
+                            selectedNoteId === note.id
+                              ? "var(--color-sidebar-selected)"
+                              : "transparent",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (selectedNoteId !== note.id) {
+                            e.currentTarget.style.backgroundColor =
+                              "var(--color-sidebar-hover)";
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (selectedNoteId !== note.id) {
+                            e.currentTarget.style.backgroundColor =
+                              "transparent";
+                          }
+                        }}
+                      >
+                        {renamingNoteId === note.id ? (
+                          <input
+                            autoFocus
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            onBlur={() => handleRenameCommit(note.id)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter")
+                                handleRenameCommit(note.id);
+                              if (e.key === "Escape") {
+                                setRenamingNoteId(null);
+                                setRenameValue("");
+                              }
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-sm font-medium w-full bg-transparent border-b outline-none"
+                            style={{
+                              color: "var(--color-text)",
+                              borderColor: "var(--color-accent)",
+                            }}
+                          />
+                        ) : (
+                          <div
+                            className="text-sm font-medium truncate"
+                            style={{ color: "var(--color-text)" }}
+                          >
+                            {note.title}
+                          </div>
+                        )}
+                        <div
+                          className="text-xs"
+                          style={{ color: "var(--color-text-secondary)" }}
+                        >
+                          {formatTime(note.started_at)}
+                          {isRecording && recordingNoteId === note.id && (
+                            <span
+                              className="ml-2 px-1.5 py-0.5 rounded text-xs font-medium"
+                              style={{
+                                backgroundColor: "var(--color-accent-light)",
+                                color: "var(--color-accent)",
+                              }}
+                            >
+                              Live
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Sidebar Footer */}
+            <div
+              className="px-3 py-2.5 border-t"
+              style={{ borderColor: "var(--color-border)" }}
+            >
+              {/* Model badges */}
+              {(loadedModel || (ollamaRunning && ollamaModel)) && (
+                <div
+                  className="flex flex-wrap items-center gap-1.5 text-xs mb-2"
+                  style={{ color: "var(--color-text-secondary)" }}
+                >
+                  {loadedModel && (
+                    <span
+                      className="px-1.5 py-0.5 rounded"
+                      style={{ backgroundColor: "var(--color-sidebar-hover)" }}
+                    >
+                      {loadedModel}
+                    </span>
+                  )}
+                  {ollamaRunning && ollamaModel && (
+                    <span
+                      className="px-1.5 py-0.5 rounded"
+                      style={{ backgroundColor: "var(--color-sidebar-hover)" }}
+                    >
+                      {ollamaModel.split(":")[0]}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* My Sessions button — for all users */}
+              <button
+                onClick={() =>
+                  setSelectedSection(
+                    selectedSection === "my-sessions" ? "notes" : "my-sessions"
+                  )
+                }
+                className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-black/5 transition-colors mb-1"
+                style={{
+                  backgroundColor:
+                    selectedSection === "my-sessions"
+                      ? "var(--color-sidebar-selected)"
+                      : "transparent",
+                }}
+              >
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-sm shrink-0"
+                  style={{
+                    backgroundColor: "var(--color-sidebar-hover)",
+                    color: "var(--color-text-secondary)",
+                  }}
+                >
+                  📊
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <div
+                    className="text-sm font-medium truncate"
+                    style={{
+                      color:
+                        selectedSection === "my-sessions"
+                          ? "var(--color-accent)"
+                          : "var(--color-text)",
+                    }}
+                  >
+                    My Sessions
+                  </div>
+                </div>
+              </button>
+
+              {/* Admin button — only for admin users */}
+              {isAdmin() && (
+                <button
+                  onClick={() =>
+                    setSelectedSection(
+                      selectedSection === "admin" ? "notes" : "admin"
+                    )
+                  }
+                  className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-black/5 transition-colors mb-1"
+                  style={{
+                    backgroundColor:
+                      selectedSection === "admin"
+                        ? "var(--color-sidebar-selected)"
+                        : "transparent",
+                  }}
+                >
+                  <div
+                    className="w-8 h-8 rounded-full flex items-center justify-center text-sm shrink-0"
+                    style={{
+                      backgroundColor: "var(--color-sidebar-hover)",
+                      color: "var(--color-text-secondary)",
+                    }}
+                  >
+                    ⚙
+                  </div>
+                  <div className="flex-1 min-w-0 text-left">
+                    <div
+                      className="text-sm font-medium truncate"
+                      style={{
+                        color:
+                          selectedSection === "admin"
+                            ? "var(--color-accent)"
+                            : "var(--color-text)",
+                      }}
+                    >
+                      Admin Dashboard
+                    </div>
+                  </div>
+                </button>
+              )}
+
+              {/* User profile */}
+              <button
+                onClick={() => {
+                  setSettingsTab("about");
                   setShowSettings(true);
-                  return;
-                }
+                }}
+                className="w-full flex items-center gap-2 p-2 rounded-lg hover:bg-black/5 transition-colors"
+              >
+                <div
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-sm shrink-0"
+                  style={{
+                    backgroundColor: profile.avatar
+                      ? "var(--color-accent-light)"
+                      : "var(--color-sidebar-hover)",
+                    color: profile.avatar
+                      ? "var(--color-text)"
+                      : "var(--color-text-secondary)",
+                  }}
+                >
+                  {profile.avatar ||
+                    (profile.name ? profile.name[0].toUpperCase() : "?")}
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <div
+                    className="text-sm font-medium truncate"
+                    style={{ color: "var(--color-text)" }}
+                  >
+                    {profile.name || "Set up profile"}
+                  </div>
+                  {profile.email && (
+                    <div
+                      className="text-xs truncate"
+                      style={{ color: "var(--color-text-secondary)" }}
+                    >
+                      {profile.email}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {(!profile.name ||
+                    !loadedModel ||
+                    !ollamaRunning ||
+                    !ollamaModel ||
+                    updateAvailable ||
+                    systemNeedsSetup) && (
+                    <svg
+                      className="w-4 h-4 mt-0.5"
+                      style={{ color: "#f59e0b" }}
+                      fill="currentColor"
+                      viewBox="0 0 20 20"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  )}
+                  <svg
+                    className="w-6 h-6"
+                    style={{ color: "var(--color-text-tertiary)" }}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                </div>
+              </button>
+            </div>
+          </aside>
 
-                if (recordingNoteId) {
-                  await resumeRecording(recordingNoteId);
-                  // Pass current liveSegments to preserve them when resuming
-                  await startLiveTranscription(
-                    recordingNoteId,
-                    profile?.name || "Me",
-                    liveSegments
-                  );
+          {/* Main Content */}
+          <main
+            className="flex-1 flex flex-col relative overflow-hidden"
+            style={{ backgroundColor: "var(--color-bg)", minHeight: 0 }}
+          >
+            <SessionPanel />
+            {selectedSection === "my-sessions" ? (
+              <UserDashboard />
+            ) : selectedSection === "admin" && isAdmin() ? (
+              <AdminDashboard />
+            ) : selectedNote ? (
+              <NoteView
+                key={selectedNote.id}
+                note={selectedNote}
+                transcript={currentTranscript}
+                isRecording={isRecording && recordingNoteId === selectedNote.id}
+                isPaused={isPaused && recordingNoteId === selectedNote.id}
+                audioLevel={audioLevel}
+                activeTab={activeTab}
+                editingTitle={editingTitle}
+                ollamaRunning={ollamaRunning}
+                hasOllamaModel={!!ollamaModel}
+                isRegenerating={isGeneratingSummaryTitle}
+                isTranscribing={
+                  isLiveTranscribing && recordingNoteId === selectedNote.id
                 }
-              } catch (error) {
-                console.error("Resume recording failed:", error);
-              }
-            }}
-            onContinueRecording={async () => {
-              try {
-                // Check microphone permission before continuing
-                const status = await refreshSystemStatus();
-                if (!status.micAvailable || !status.micPermission) {
-                  setSettingsTab("system");
-                  setShowSettings(true);
-                  return;
-                }
-
-                setRecordingNoteId(selectedNote.id);
-                // Load existing transcripts before starting
-                const existingSegments = await loadTranscript(selectedNote.id);
-                await continueRecording(selectedNote.id);
-                await startLiveTranscription(
-                  selectedNote.id,
-                  profile?.name || "Me",
-                  existingSegments
-                );
-                setActiveTab("transcript");
-              } catch (error) {
-                console.error("Continue recording failed:", error);
-              }
-            }}
-            onDelete={() => setShowDeleteConfirm(true)}
-            onExport={async () => {
-              try {
-                const data = await exportApi.exportMarkdown(selectedNote.id);
-                const filePath = await exportApi.savePdfWithDialog(data.markdown, data.filename);
-                if (filePath) {
+                summariesRefreshKey={summariesRefreshKey}
+                loadedModel={loadedModel}
+                onTabChange={setActiveTab}
+                onEditTitle={() => setEditingTitle(true)}
+                onUpdateTitle={handleUpdateTitle}
+                onUpdateDescription={handleUpdateDescription}
+                onStopRecording={handleStopRecording}
+                onPauseRecording={async () => {
                   try {
-                    await invoke("log_export", {
-                      userId: user?.id ?? null,
-                      sessionId: activeSessionId ?? null,
-                      exportFormat: "pdf",
-                      filePath: filePath,
-                    });
-                  } catch (err) {
-                    console.error("Failed to log export:", err);
+                    await pauseRecording();
+                  } catch (error) {
+                    console.error("Pause recording failed:", error);
+                  }
+                }}
+                onResumeRecording={async () => {
+                  try {
+                    // Check microphone permission before resuming
+                    const status = await refreshSystemStatus();
+                    if (!status.micAvailable || !status.micPermission) {
+                      setSettingsTab("system");
+                      setShowSettings(true);
+                      return;
+                    }
+
+                    if (recordingNoteId) {
+                      await resumeRecording(recordingNoteId);
+                      // Pass current liveSegments to preserve them when resuming
+                      await startLiveTranscription(
+                        recordingNoteId,
+                        profile?.name || "Me",
+                        liveSegments
+                      );
+                    }
+                  } catch (error) {
+                    console.error("Resume recording failed:", error);
+                  }
+                }}
+                onContinueRecording={async () => {
+                  try {
+                    // Check microphone permission before continuing
+                    const status = await refreshSystemStatus();
+                    if (!status.micAvailable || !status.micPermission) {
+                      setSettingsTab("system");
+                      setShowSettings(true);
+                      return;
+                    }
+
+                    setRecordingNoteId(selectedNote.id);
+                    // Load existing transcripts before starting
+                    const existingSegments = await loadTranscript(
+                      selectedNote.id
+                    );
+                    await continueRecording(selectedNote.id);
+                    await startLiveTranscription(
+                      selectedNote.id,
+                      profile?.name || "Me",
+                      existingSegments
+                    );
+                    setActiveTab("transcript");
+                  } catch (error) {
+                    console.error("Continue recording failed:", error);
+                  }
+                }}
+                onDelete={() => setShowDeleteConfirm(true)}
+                onExport={async () => {
+                  try {
+                    const data = await exportApi.exportMarkdown(
+                      selectedNote.id
+                    );
+                    const filePath = await exportApi.savePdfWithDialog(
+                      data.markdown,
+                      data.filename
+                    );
+                    if (filePath) {
+                      try {
+                        await invoke("log_export", {
+                          userId: user?.id ?? null,
+                          sessionId: activeSessionId ?? null,
+                          exportFormat: "pdf",
+                          filePath: filePath,
+                        });
+                      } catch (err) {
+                        console.error("Failed to log export:", err);
+                      }
+                    }
+                  } catch (error) {
+                    console.error("Export failed:", error);
+                  }
+                }}
+                onRegenerate={handleRegenerateSummaryTitle}
+                onClose={() => setSelectedNoteId(null)}
+                onTranscriptUpdated={async () => {
+                  if (selectedNote) {
+                    const segments = await loadTranscript(selectedNote.id);
+                    if (segments.length > 0) {
+                      setNoteTranscripts((prev) => ({
+                        ...prev,
+                        [selectedNote.id]: segments,
+                      }));
+                    }
+                  }
+                }}
+                showAISidebar={showAISidebar}
+                onToggleAISidebar={() => setShowAISidebar((prev) => !prev)}
+              />
+            ) : (
+              <EmptyState
+                needsSetup={!loadedModel || !ollamaRunning || !ollamaModel}
+                onOpenSettings={() => {
+                  setSettingsTab("whisper");
+                  setShowSettings(true);
+                }}
+              />
+            )}
+
+            {/* Start Listening Button, Recording Indicator, or Generating Indicator */}
+            {/* Hide when viewing a note (unless recording or generating) */}
+            {!(selectedNote && !isRecording && !isGeneratingSummaryTitle) && (
+              <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
+                {isGeneratingSummaryTitle ? (
+                  <div
+                    className="flex items-center gap-3 px-4 py-2 rounded-full shadow-lg"
+                    style={{
+                      backgroundColor: "var(--color-bg-elevated)",
+                      border: "1px solid var(--color-border)",
+                    }}
+                  >
+                    <div
+                      className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin"
+                      style={{
+                        borderColor: "var(--color-accent)",
+                        borderTopColor: "transparent",
+                      }}
+                    />
+                    <span
+                      className="text-sm font-medium"
+                      style={{ color: "var(--color-text)" }}
+                    >
+                      Generating Summary
+                    </span>
+                  </div>
+                ) : isPaused && recordingNote ? (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={async () => {
+                        try {
+                          if (recordingNoteId) {
+                            await resumeRecording(recordingNoteId);
+                            await startLiveTranscription(recordingNoteId);
+                          }
+                        } catch (error) {
+                          console.error("Resume recording failed:", error);
+                        }
+                      }}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm shadow-md transition-transform hover:scale-105"
+                      style={{
+                        backgroundColor: "var(--color-accent)",
+                        color: "white",
+                      }}
+                    >
+                      <svg
+                        className="w-3.5 h-3.5"
+                        fill="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M8 5v14l11-7z" />
+                      </svg>
+                      Resume
+                    </button>
+                    <button
+                      onClick={handleStopRecording}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm shadow-md transition-transform hover:scale-105"
+                      style={{
+                        backgroundColor: "var(--color-bg-elevated)",
+                        border: "1px solid var(--color-border)",
+                        color: "var(--color-text)",
+                      }}
+                    >
+                      Stop
+                    </button>
+                  </div>
+                ) : isRecording && recordingNote ? (
+                  <button
+                    onClick={handleStopRecording}
+                    className="flex items-center gap-3 px-4 py-2 rounded-full shadow-lg transition-transform hover:scale-105"
+                    style={{
+                      backgroundColor: "var(--color-bg-elevated)",
+                      border: "1px solid var(--color-border)",
+                    }}
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full animate-pulse"
+                      style={{ backgroundColor: "var(--color-accent)" }}
+                    />
+                    <span
+                      className="text-sm"
+                      style={{ color: "var(--color-text-secondary)" }}
+                    >
+                      <kbd
+                        className="font-medium"
+                        style={{ color: "var(--color-text)" }}
+                      >
+                        {navigator.platform.includes("Mac") ? "⌘" : "Ctrl"} + S
+                      </kbd>{" "}
+                      to stop
+                    </span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleStartRecording}
+                    disabled={!loadedModel || !ollamaRunning || !ollamaModel}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm shadow-md transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 hover:scale-105"
+                    style={{
+                      backgroundColor: "var(--color-accent)",
+                      color: "white",
+                    }}
+                    title={
+                      !loadedModel || !ollamaRunning || !ollamaModel
+                        ? "Complete setup in Settings first"
+                        : undefined
+                    }
+                  >
+                    <span className="w-2 h-2 rounded-full bg-white" />
+                    Start listening
+                  </button>
+                )}
+              </div>
+            )}
+          </main>
+
+          {/* Modals */}
+          {showSettings && (
+            <Settings
+              onClose={() => {
+                setShowSettings(false);
+                refreshSystemStatus();
+              }}
+              initialTab={settingsTab}
+              onTabChange={setSettingsTab}
+            />
+          )}
+          {showDeleteConfirm && (noteToDelete || selectedNote) && (
+            <ConfirmDialog
+              title="Delete Note"
+              message={`Are you sure you want to delete "${(noteToDelete || selectedNote)!.title}"? This action cannot be undone.`}
+              confirmLabel="Delete"
+              onConfirm={() => {
+                const note = noteToDelete || selectedNote;
+                if (note) {
+                  deleteNote(note.id);
+                  if (selectedNoteId === note.id) {
+                    setSelectedNoteId(null);
                   }
                 }
-              } catch (error) {
-                console.error("Export failed:", error);
-              }
-            }}
-            onRegenerate={handleRegenerateSummaryTitle}
-            onClose={() => setSelectedNoteId(null)}
-            onTranscriptUpdated={async () => {
-              if (selectedNote) {
-                const segments = await loadTranscript(selectedNote.id);
-                if (segments.length > 0) {
-                  setNoteTranscripts((prev) => ({
-                    ...prev,
-                    [selectedNote.id]: segments,
-                  }));
-                }
-              }
-            }}
-            showAISidebar={showAISidebar}
-            onToggleAISidebar={() => setShowAISidebar((prev) => !prev)}
-          />
-        ) : (
-          <EmptyState
-            needsSetup={!loadedModel || !ollamaRunning || !ollamaModel}
+                setShowDeleteConfirm(false);
+                setNoteToDelete(null);
+              }}
+              onCancel={() => {
+                setShowDeleteConfirm(false);
+                setNoteToDelete(null);
+              }}
+            />
+          )}
+
+          {/* Context Menu */}
+          {contextMenu && (
+            <ContextMenu
+              x={contextMenu.x}
+              y={contextMenu.y}
+              type={contextMenu.type}
+              onAction={handleContextMenuAction}
+            />
+          )}
+
+          {/* Update Notification */}
+          <UpdateNotification
             onOpenSettings={() => {
-              setSettingsTab("whisper");
+              setSettingsTab("updates");
               setShowSettings(true);
             }}
           />
-        )}
 
-        {/* Start Listening Button, Recording Indicator, or Generating Indicator */}
-        {/* Hide when viewing a note (unless recording or generating) */}
-        {!(selectedNote && !isRecording && !isGeneratingSummaryTitle) && (
-          <div className="absolute bottom-8 left-1/2 -translate-x-1/2">
-            {isGeneratingSummaryTitle ? (
-              <div
-                className="flex items-center gap-3 px-4 py-2 rounded-full shadow-lg"
-                style={{
-                  backgroundColor: "var(--color-bg-elevated)",
-                  border: "1px solid var(--color-border)",
-                }}
-              >
-                <div
-                  className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin"
-                  style={{
-                    borderColor: "var(--color-accent)",
-                    borderTopColor: "transparent",
-                  }}
-                />
-                <span
-                  className="text-sm font-medium"
-                  style={{ color: "var(--color-text)" }}
-                >
-                  Generating Summary
-                </span>
-              </div>
-            ) : isPaused && recordingNote ? (
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={async () => {
-                    try {
-                      if (recordingNoteId) {
-                        await resumeRecording(recordingNoteId);
-                        await startLiveTranscription(recordingNoteId);
-                      }
-                    } catch (error) {
-                      console.error("Resume recording failed:", error);
-                    }
-                  }}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm shadow-md transition-transform hover:scale-105"
-                  style={{
-                    backgroundColor: "var(--color-accent)",
-                    color: "white",
-                  }}
-                >
-                  <svg
-                    className="w-3.5 h-3.5"
-                    fill="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path d="M8 5v14l11-7z" />
-                  </svg>
-                  Resume
-                </button>
-                <button
-                  onClick={handleStopRecording}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm shadow-md transition-transform hover:scale-105"
-                  style={{
-                    backgroundColor: "var(--color-bg-elevated)",
-                    border: "1px solid var(--color-border)",
-                    color: "var(--color-text)",
-                  }}
-                >
-                  Stop
-                </button>
-              </div>
-            ) : isRecording && recordingNote ? (
-              <button
-                onClick={handleStopRecording}
-                className="flex items-center gap-3 px-4 py-2 rounded-full shadow-lg transition-transform hover:scale-105"
-                style={{
-                  backgroundColor: "var(--color-bg-elevated)",
-                  border: "1px solid var(--color-border)",
-                }}
-              >
-                <span
-                  className="w-2 h-2 rounded-full animate-pulse"
-                  style={{ backgroundColor: "var(--color-accent)" }}
-                />
-                <span
-                  className="text-sm"
-                  style={{ color: "var(--color-text-secondary)" }}
-                >
-                  <kbd
-                    className="font-medium"
-                    style={{ color: "var(--color-text)" }}
-                  >
-                    {navigator.platform.includes("Mac") ? "⌘" : "Ctrl"} + S
-                  </kbd>{" "}
-                  to stop
-                </span>
-              </button>
-            ) : (
-              <button
-                onClick={handleStartRecording}
-                disabled={!loadedModel || !ollamaRunning || !ollamaModel}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full text-sm shadow-md transition-transform disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 hover:scale-105"
-                style={{
-                  backgroundColor: "var(--color-accent)",
-                  color: "white",
-                }}
-                title={
-                  !loadedModel || !ollamaRunning || !ollamaModel
-                    ? "Complete setup in Settings first"
-                    : undefined
-                }
-              >
-                <span className="w-2 h-2 rounded-full bg-white" />
-                Start listening
-              </button>
-            )}
-          </div>
-        )}
-      </main>
-
-      {/* Modals */}
-      {showSettings && (
-        <Settings
-          onClose={() => {
-            setShowSettings(false);
-            refreshSystemStatus();
-          }}
-          initialTab={settingsTab}
-          onTabChange={setSettingsTab}
-        />
-      )}
-      {showDeleteConfirm && (noteToDelete || selectedNote) && (
-        <ConfirmDialog
-          title="Delete Note"
-          message={`Are you sure you want to delete "${(noteToDelete || selectedNote)!.title}"? This action cannot be undone.`}
-          confirmLabel="Delete"
-          onConfirm={() => {
-            const note = noteToDelete || selectedNote;
-            if (note) {
-              deleteNote(note.id);
-              if (selectedNoteId === note.id) {
-                setSelectedNoteId(null);
-              }
-            }
-            setShowDeleteConfirm(false);
-            setNoteToDelete(null);
-          }}
-          onCancel={() => {
-            setShowDeleteConfirm(false);
-            setNoteToDelete(null);
-          }}
-        />
-      )}
-
-      {/* Context Menu */}
-      {contextMenu && (
-        <ContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          type={contextMenu.type}
-          onAction={handleContextMenuAction}
-        />
-      )}
-
-      {/* Update Notification */}
-      <UpdateNotification
-        onOpenSettings={() => {
-          setSettingsTab("updates");
-          setShowSettings(true);
-        }}
-      />
-
-      {/* Meeting Detected Popup */}
-      <MeetingDetectedPopup onStartListening={handleStartRecording} />
-        </div>{/* end main content flex row */}
-      </div>{/* end outer column flex */}
+          {/* Meeting Detected Popup */}
+          <MeetingDetectedPopup onStartListening={handleStartRecording} />
+        </div>
+        {/* end main content flex row */}
+      </div>
+      {/* end outer column flex */}
     </AuthGuard>
   );
 }
@@ -1259,113 +1424,153 @@ interface EmptyStateProps {
 
 function EmptyState({ needsSetup, onOpenSettings }: EmptyStateProps) {
   return (
-    <div className="flex-1 flex flex-col items-center justify-center pb-20">
-      <div className="text-center max-w-sm px-6">
-        <LogoImage className="w-32 h-auto mx-auto mb-4" />
-        <p className="text-sm" style={{ color: "var(--color-text-secondary)" }}>
-          Select a note or start a new one
-        </p>
-        <div
-          className="mt-4 flex flex-col items-start gap-2 text-xs mx-auto w-fit"
-          style={{ color: "var(--color-text-tertiary)" }}
-        >
-          <div className="flex items-center gap-2">
-            <kbd
-              className="px-1.5 py-0.5 rounded font-medium"
-              style={{
-                backgroundColor: "var(--color-sidebar)",
-                border: "1px solid var(--color-border)",
-              }}
-            >
-              ⌘
-            </kbd>
-            <kbd
-              className="px-1.5 py-0.5 rounded font-medium"
-              style={{
-                backgroundColor: "var(--color-sidebar)",
-                border: "1px solid var(--color-border)",
-              }}
-            >
-              N
-            </kbd>
-            <span>new note</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <kbd
-              className="px-1.5 py-0.5 rounded font-medium"
-              style={{
-                backgroundColor: "var(--color-sidebar)",
-                border: "1px solid var(--color-border)",
-              }}
-            >
-              ⌘
-            </kbd>
-            <kbd
-              className="px-1.5 py-0.5 rounded font-medium"
-              style={{
-                backgroundColor: "var(--color-sidebar)",
-                border: "1px solid var(--color-border)",
-              }}
-            >
-              R
-            </kbd>
-            <span>start recording</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <kbd
-              className="px-1.5 py-0.5 rounded font-medium"
-              style={{
-                backgroundColor: "var(--color-sidebar)",
-                border: "1px solid var(--color-border)",
-              }}
-            >
-              ⌘
-            </kbd>
-            <kbd
-              className="px-1.5 py-0.5 rounded font-medium"
-              style={{
-                backgroundColor: "var(--color-sidebar)",
-                border: "1px solid var(--color-border)",
-              }}
-            >
-              M
-            </kbd>
-            <span>toggle theme</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <kbd
-              className="px-1.5 py-0.5 rounded font-medium"
-              style={{
-                backgroundColor: "var(--color-sidebar)",
-                border: "1px solid var(--color-border)",
-              }}
-            >
-              ⌘
-            </kbd>
-            <kbd
-              className="px-1.5 py-0.5 rounded font-medium"
-              style={{
-                backgroundColor: "var(--color-sidebar)",
-                border: "1px solid var(--color-border)",
-              }}
-            >
-              ,
-            </kbd>
-            <span>settings</span>
+    <div
+      className="flex-1 flex flex-col items-center justify-center"
+      style={{ animation: "fadeIn 0.4s ease" }}
+    >
+      <div className="text-center px-8" style={{ maxWidth: 420 }}>
+        {/* Logo */}
+        <div className="flex justify-center mb-5">
+          <div
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: 18,
+              background: "var(--color-accent-light)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <img
+              src="/qlogo.png"
+              alt="QuickPoint"
+              style={{ width: 40, height: 40 }}
+            />
           </div>
         </div>
+
+        {/* Title */}
+        <h2
+          className="text-xl font-semibold mb-1"
+          style={{ color: "var(--color-text)" }}
+        >
+          QuickPoint
+        </h2>
+        <p
+          className="text-sm mb-6"
+          style={{ color: "var(--color-text-secondary)" }}
+        >
+          AI-powered meeting assistant — transcribe, summarize, and capture key
+          points.
+        </p>
+
+        {/* Quick action cards */}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 10,
+            marginBottom: 24,
+          }}
+        >
+          {[
+            {
+              icon: "📝",
+              label: "New Note",
+              hint: "⌘N",
+              color: "var(--color-accent-light)",
+            },
+            {
+              icon: "🎙️",
+              label: "Start Recording",
+              hint: "⌘R",
+              color: "rgba(16,185,129,0.1)",
+            },
+            {
+              icon: "📁",
+              label: "Upload Audio",
+              hint: "··· menu",
+              color: "rgba(245,158,11,0.1)",
+            },
+            {
+              icon: "⚙️",
+              label: "Settings",
+              hint: "⌘,",
+              color: "rgba(156,163,175,0.1)",
+            },
+          ].map((a) => (
+            <div
+              key={a.label}
+              style={{
+                background: "var(--color-bg-elevated)",
+                border: "1px solid var(--color-border)",
+                borderRadius: 12,
+                padding: "12px 14px",
+                textAlign: "left",
+                cursor: "default",
+                transition: "box-shadow 0.2s ease",
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLDivElement).style.boxShadow =
+                  "0 4px 12px rgba(99,102,241,0.12)";
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLDivElement).style.boxShadow = "none";
+              }}
+            >
+              <div
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  background: a.color,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 16,
+                  marginBottom: 8,
+                }}
+              >
+                {a.icon}
+              </div>
+              <div
+                className="text-sm font-medium"
+                style={{ color: "var(--color-text)" }}
+              >
+                {a.label}
+              </div>
+              <div
+                className="text-xs mt-0.5"
+                style={{ color: "var(--color-text-tertiary)" }}
+              >
+                {a.hint}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Setup warning */}
         {needsSetup && (
           <button
             onClick={onOpenSettings}
-            className="mt-4 flex items-center gap-2 mx-auto px-3 py-2 text-sm rounded-lg transition-colors hover:bg-black/5"
             style={{
-              color: "var(--color-text-secondary)",
-              border: "1px solid var(--color-border)",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              margin: "0 auto",
+              padding: "9px 16px",
+              fontSize: 13,
+              borderRadius: 8,
+              background: "rgba(245,158,11,0.08)",
+              border: "1px solid rgba(245,158,11,0.3)",
+              color: "#b45309",
+              cursor: "pointer",
+              transition: "all 0.15s ease",
             }}
           >
             <svg
-              className="w-4 h-4"
-              style={{ color: "#f59e0b" }}
+              style={{ width: 14, height: 14 }}
               fill="currentColor"
               viewBox="0 0 20 20"
             >
@@ -1375,7 +1580,7 @@ function EmptyState({ needsSetup, onOpenSettings }: EmptyStateProps) {
                 clipRule="evenodd"
               />
             </svg>
-            Set up Whisper & Ollama
+            Complete setup — Whisper & Ollama required
           </button>
         )}
       </div>
@@ -1470,42 +1675,54 @@ function NoteView({
   const cleanAIOutput = useCallback((text: string) => {
     let cleaned = text;
     // Remove code block markers
-    cleaned = cleaned.replace(/^```[\w]*\n?/gm, '');
-    cleaned = cleaned.replace(/```$/gm, '');
+    cleaned = cleaned.replace(/^```[\w]*\n?/gm, "");
+    cleaned = cleaned.replace(/```$/gm, "");
     // Remove leading spaces from each line (prevents code block in editor)
-    cleaned = cleaned.split('\n').map(line => line.trimStart()).join('\n');
+    cleaned = cleaned
+      .split("\n")
+      .map((line) => line.trimStart())
+      .join("\n");
     // Fix double dashes to single dash for bullets
-    cleaned = cleaned.replace(/^--\s*/gm, '- ');
-    cleaned = cleaned.replace(/^\s+--\s*/gm, '  - ');
+    cleaned = cleaned.replace(/^--\s*/gm, "- ");
+    cleaned = cleaned.replace(/^\s+--\s*/gm, "  - ");
     // Remove orphan asterisks at start of lines (****text -> text)
-    cleaned = cleaned.replace(/^\*{3,}/gm, '');
+    cleaned = cleaned.replace(/^\*{3,}/gm, "");
     // Fix "** text" (space after **) - remove the asterisks
-    cleaned = cleaned.replace(/\*\*\s+/g, '');
+    cleaned = cleaned.replace(/\*\*\s+/g, "");
     // Remove trailing orphan asterisks
-    cleaned = cleaned.replace(/\*{2,}$/gm, '');
+    cleaned = cleaned.replace(/\*{2,}$/gm, "");
     // Fix double colons
-    cleaned = cleaned.replace(/::/g, ':');
+    cleaned = cleaned.replace(/::/g, ":");
     // Remove duplicate consecutive words
-    cleaned = cleaned.replace(/\b(\w+)\s+\1\b/gi, '$1');
+    cleaned = cleaned.replace(/\b(\w+)\s+\1\b/gi, "$1");
     return cleaned.trim();
   }, []);
 
   // Handle AI text insertion
-  const handleAIInsert = useCallback((text: string) => {
-    const cleaned = cleanAIOutput(text);
-    setDescValue((prev) => prev + "\n\n" + cleaned);
-  }, [cleanAIOutput]);
+  const handleAIInsert = useCallback(
+    (text: string) => {
+      const cleaned = cleanAIOutput(text);
+      setDescValue((prev) => prev + "\n\n" + cleaned);
+    },
+    [cleanAIOutput]
+  );
 
   // Handle AI text replacement
-  const handleAIReplace = useCallback((text: string) => {
-    const cleaned = cleanAIOutput(text);
-    setDescValue(cleaned);
-  }, [cleanAIOutput]);
+  const handleAIReplace = useCallback(
+    (text: string) => {
+      const cleaned = cleanAIOutput(text);
+      setDescValue(cleaned);
+    },
+    [cleanAIOutput]
+  );
 
   // Handle AI generation
-  const handleAIGenerate = useCallback((content: string, action: string) => {
-    generateAI(content, action, descValue);
-  }, [generateAI, descValue]);
+  const handleAIGenerate = useCallback(
+    (content: string, action: string) => {
+      generateAI(content, action, descValue);
+    },
+    [generateAI, descValue]
+  );
 
   // Handle after AI insert/replace - switch to notes tab
   const handleAIInserted = useCallback(() => {
@@ -1515,13 +1732,17 @@ function NoteView({
   // Close menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+      if (
+        moreMenuRef.current &&
+        !moreMenuRef.current.contains(e.target as Node)
+      ) {
         setShowMoreMenu(false);
       }
     };
     if (showMoreMenu) {
       document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
+      return () =>
+        document.removeEventListener("mousedown", handleClickOutside);
     }
   }, [showMoreMenu]);
 
@@ -1627,7 +1848,14 @@ function NoteView({
     } finally {
       setIsRetranscribing(false);
     }
-  }, [note.id, isRetranscribing, onTranscriptUpdated, onTabChange, audioSegments, uploads]);
+  }, [
+    note.id,
+    isRetranscribing,
+    onTranscriptUpdated,
+    onTabChange,
+    audioSegments,
+    uploads,
+  ]);
 
   // Set titleValue to current note.title when entering edit mode
   const handleEditTitle = () => {
@@ -1638,200 +1866,248 @@ function NoteView({
   return (
     <div className="flex-1 flex overflow-hidden" style={{ minHeight: 0 }}>
       {/* Main content */}
-      <div className="flex-1 flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
+      <div
+        className="flex-1 flex flex-col overflow-hidden"
+        style={{ minHeight: 0 }}
+      >
         {/* Header */}
         <header
-        className="px-6 py-4 border-b flex items-center justify-between gap-3"
-        style={{ borderColor: "var(--color-border)" }}
-      >
-        {/* Close button */}
-        <button
-          onClick={onClose}
-          className="p-1.5 rounded-md hover:bg-black/5 transition-colors shrink-0"
-          title="Close"
+          className="px-6 py-4 border-b flex items-center justify-between gap-3"
+          style={{ borderColor: "var(--color-border)" }}
         >
-          <svg
-            className="w-5 h-5"
-            style={{ color: "var(--color-text-secondary)" }}
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-md hover:bg-black/5 transition-colors shrink-0"
+            title="Close"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M15 19l-7-7 7-7"
-            />
-          </svg>
-        </button>
-        <div className="flex-1 min-w-0">
-          {editingTitle ? (
-            <input
-              autoFocus
-              value={titleValue}
-              onChange={(e) => setTitleValue(e.target.value)}
-              onBlur={() => onUpdateTitle(titleValue)}
-              onKeyDown={(e) => e.key === "Enter" && onUpdateTitle(titleValue)}
-              className="text-xl font-semibold w-full"
-              style={{ color: "var(--color-text)" }}
-            />
-          ) : (
-            <h1
-              onClick={handleEditTitle}
-              className="text-xl font-semibold cursor-text"
-              style={{ color: "var(--color-text)" }}
+            <svg
+              className="w-5 h-5"
+              style={{ color: "var(--color-text-secondary)" }}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
             >
-              {note.title}
-            </h1>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5">
-          {/* Recording controls */}
-          {isRecording && (
-            <>
-              <button
-                onClick={onPauseRecording}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-full font-medium"
-                style={{
-                  backgroundColor: "var(--color-bg-elevated)",
-                  border: "1px solid var(--color-border)",
-                  color: "var(--color-text)",
-                }}
-                title="Pause recording"
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.5}
+                d="M15 19l-7-7 7-7"
+              />
+            </svg>
+          </button>
+          <div className="flex-1 min-w-0">
+            {editingTitle ? (
+              <input
+                autoFocus
+                value={titleValue}
+                onChange={(e) => setTitleValue(e.target.value)}
+                onBlur={() => onUpdateTitle(titleValue)}
+                onKeyDown={(e) =>
+                  e.key === "Enter" && onUpdateTitle(titleValue)
+                }
+                className="text-xl font-semibold w-full"
+                style={{ color: "var(--color-text)" }}
+              />
+            ) : (
+              <h1
+                onClick={handleEditTitle}
+                className="text-xl font-semibold cursor-text"
+                style={{ color: "var(--color-text)" }}
               >
-                <svg
-                  className="w-3.5 h-3.5"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-                </svg>
-                Pause
-              </button>
-              <button
-                onClick={onStopRecording}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-full font-medium"
-                style={{
-                  backgroundColor: "var(--color-accent)",
-                  color: "white",
-                }}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                Stop
-              </button>
-            </>
-          )}
-          {/* Paused controls */}
-          {isPaused && (
-            <>
-              <button
-                onClick={onResumeRecording}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-full font-medium"
-                style={{
-                  backgroundColor: "var(--color-accent)",
-                  color: "white",
-                }}
-                title="Resume recording"
-              >
-                <svg
-                  className="w-3.5 h-3.5"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-                Resume
-              </button>
-              <button
-                onClick={onStopRecording}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-full font-medium"
-                style={{
-                  backgroundColor: "var(--color-bg-elevated)",
-                  border: "1px solid var(--color-border)",
-                  color: "var(--color-text)",
-                }}
-              >
-                Stop
-              </button>
-            </>
-          )}
-          {/* Ended/idle note controls - show Listen for any note not currently recording or generating */}
-          {!isRecording && !isPaused && !isRegenerating && !isGenerating && (
-            <>
-              <button
-                onClick={onContinueRecording}
-                className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full font-medium"
-                style={{
-                  backgroundColor: "var(--color-accent)",
-                  color: "white",
-                }}
-                title="Listen"
-              >
-                <svg
-                  className="w-3 h-3"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  />
-                  <circle cx="12" cy="12" r="4" />
-                </svg>
-                Record
-              </button>
-              {/* Retranscribe All button - show when model loaded and there are audio files */}
-              {loadedModel && (audioSegments.length > 0 || uploads.length > 0) && (
+                {note.title}
+              </h1>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            {/* Recording controls */}
+            {isRecording && (
+              <>
                 <button
-                  onClick={handleRetranscribeAll}
-                  disabled={isRetranscribing || isTranscribingUpload}
-                  className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full font-medium disabled:opacity-50"
+                  onClick={onPauseRecording}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-full font-medium"
                   style={{
                     backgroundColor: "var(--color-bg-elevated)",
                     border: "1px solid var(--color-border)",
                     color: "var(--color-text)",
                   }}
-                  title="Retranscribe all audio with current model"
+                  title="Pause recording"
                 >
-                  {isRetranscribing ? (
-                    <div
-                      className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin"
-                      style={{
-                        borderColor: "var(--color-text-secondary)",
-                        borderTopColor: "transparent",
-                      }}
+                  <svg
+                    className="w-3.5 h-3.5"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                  </svg>
+                  Pause
+                </button>
+                <button
+                  onClick={onStopRecording}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-full font-medium"
+                  style={{
+                    backgroundColor: "var(--color-accent)",
+                    color: "white",
+                  }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+                  Stop
+                </button>
+              </>
+            )}
+            {/* Paused controls */}
+            {isPaused && (
+              <>
+                <button
+                  onClick={onResumeRecording}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-full font-medium"
+                  style={{
+                    backgroundColor: "var(--color-accent)",
+                    color: "white",
+                  }}
+                  title="Resume recording"
+                >
+                  <svg
+                    className="w-3.5 h-3.5"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                  Resume
+                </button>
+                <button
+                  onClick={onStopRecording}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-full font-medium"
+                  style={{
+                    backgroundColor: "var(--color-bg-elevated)",
+                    border: "1px solid var(--color-border)",
+                    color: "var(--color-text)",
+                  }}
+                >
+                  Stop
+                </button>
+              </>
+            )}
+            {/* Ended/idle note controls - show Listen for any note not currently recording or generating */}
+            {!isRecording && !isPaused && !isRegenerating && !isGenerating && (
+              <>
+                <button
+                  onClick={onContinueRecording}
+                  className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full font-medium"
+                  style={{
+                    backgroundColor: "var(--color-accent)",
+                    color: "white",
+                  }}
+                  title="Listen"
+                >
+                  <svg
+                    className="w-3 h-3"
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
                     />
-                  ) : (
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
+                    <circle cx="12" cy="12" r="4" />
+                  </svg>
+                  Record
+                </button>
+                {/* Retranscribe All button - show when model loaded and there are audio files */}
+                {loadedModel &&
+                  (audioSegments.length > 0 || uploads.length > 0) && (
+                    <button
+                      onClick={handleRetranscribeAll}
+                      disabled={isRetranscribing || isTranscribingUpload}
+                      className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full font-medium disabled:opacity-50"
+                      style={{
+                        backgroundColor: "var(--color-bg-elevated)",
+                        border: "1px solid var(--color-border)",
+                        color: "var(--color-text)",
+                      }}
+                      title="Retranscribe all audio with current model"
+                    >
+                      {isRetranscribing ? (
+                        <div
+                          className="w-3 h-3 border-2 border-t-transparent rounded-full animate-spin"
+                          style={{
+                            borderColor: "var(--color-text-secondary)",
+                            borderTopColor: "transparent",
+                          }}
+                        />
+                      ) : (
+                        <svg
+                          className="w-3 h-3"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                          />
+                        </svg>
+                      )}
+                      {isRetranscribing ? "Retranscribing..." : "Retranscribe"}
+                    </button>
                   )}
-                  {isRetranscribing ? "Retranscribing..." : "Retranscribe"}
+              </>
+            )}
+            {/* Generate/Regenerate button */}
+            {!isRecording &&
+              !isTranscribing &&
+              !isGenerating &&
+              !isRegenerating &&
+              (transcript.length > 0 || descValue.trim().length > 0) &&
+              hasOllamaModel &&
+              ollamaRunning && (
+                <button
+                  onClick={onRegenerate}
+                  className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full font-medium"
+                  style={{
+                    backgroundColor: "#374151",
+                    color: "white",
+                  }}
+                  title="Summarize"
+                >
+                  <svg
+                    className="w-3 h-3"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
+                    />
+                  </svg>
+                  Summarize
                 </button>
               )}
-            </>
-          )}
-          {/* Generate/Regenerate button */}
-          {!isRecording &&
-            !isTranscribing &&
-            !isGenerating &&
-            !isRegenerating &&
-            (transcript.length > 0 || descValue.trim().length > 0) &&
-            hasOllamaModel &&
-            ollamaRunning && (
+            {/* AI Assistant toggle */}
+            {!isRecording && !isPaused && ollamaRunning && hasOllamaModel && (
               <button
-                onClick={onRegenerate}
-                className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full font-medium"
+                onClick={onToggleAISidebar}
+                className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full font-medium transition-colors"
                 style={{
-                  backgroundColor: "#374151",
-                  color: "white",
+                  backgroundColor: showAISidebar
+                    ? "var(--color-accent)"
+                    : "var(--color-bg-elevated)",
+                  border: showAISidebar
+                    ? "none"
+                    : "1px solid var(--color-border)",
+                  color: showAISidebar ? "white" : "var(--color-text)",
                 }}
-                title="Summarize"
+                title="AI Assistant (⌘J)"
               >
                 <svg
                   className="w-3 h-3"
@@ -1846,290 +2122,295 @@ function NoteView({
                     d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
                   />
                 </svg>
-                Summarize
+                AI
               </button>
             )}
-          {/* AI Assistant toggle */}
-          {!isRecording && !isPaused && ollamaRunning && hasOllamaModel && (
-            <button
-              onClick={onToggleAISidebar}
-              className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full font-medium transition-colors"
-              style={{
-                backgroundColor: showAISidebar ? "var(--color-accent)" : "var(--color-bg-elevated)",
-                border: showAISidebar ? "none" : "1px solid var(--color-border)",
-                color: showAISidebar ? "white" : "var(--color-text)",
-              }}
-              title="AI Assistant (⌘J)"
-            >
-              <svg
-                className="w-3 h-3"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-                />
-              </svg>
-              AI
-            </button>
-          )}
-          {/* More menu */}
-          {!isRecording && !isPaused && (
-            <div className="relative" ref={moreMenuRef}>
-              <button
-                onClick={() => setShowMoreMenu(!showMoreMenu)}
-                className="p-1.5 rounded-md hover:bg-black/5"
-                title="More actions"
-              >
-                <svg
-                  className="w-4 h-4"
-                  style={{ color: "var(--color-text-secondary)" }}
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
+            {/* More menu */}
+            {!isRecording && !isPaused && (
+              <div className="relative" ref={moreMenuRef}>
+                <button
+                  onClick={() => setShowMoreMenu(!showMoreMenu)}
+                  className="p-1.5 rounded-md hover:bg-black/5"
+                  title="More actions"
                 >
-                  <circle cx="12" cy="5" r="2" />
-                  <circle cx="12" cy="12" r="2" />
-                  <circle cx="12" cy="19" r="2" />
-                </svg>
-              </button>
-              {showMoreMenu && (
-                <div
-                  className="absolute right-0 top-full mt-1 py-1 rounded-lg shadow-lg min-w-[140px] z-50"
-                  style={{
-                    backgroundColor: "var(--color-bg-elevated)",
-                    border: "1px solid var(--color-border)",
-                  }}
-                >
-                  <button
-                    onClick={() => {
-                      uploadAudio();
-                      setShowMoreMenu(false);
-                    }}
-                    disabled={isUploading}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-black/5 flex items-center gap-2 disabled:opacity-50"
-                    style={{ color: "var(--color-text)" }}
+                  <svg
+                    className="w-4 h-4"
+                    style={{ color: "var(--color-text-secondary)" }}
+                    fill="currentColor"
+                    viewBox="0 0 24 24"
                   >
-                    {isUploading ? (
-                      <div
-                        className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin"
-                        style={{
-                          borderColor: "var(--color-text-secondary)",
-                          borderTopColor: "transparent",
-                        }}
-                      />
-                    ) : (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                    <circle cx="12" cy="5" r="2" />
+                    <circle cx="12" cy="12" r="2" />
+                    <circle cx="12" cy="19" r="2" />
+                  </svg>
+                </button>
+                {showMoreMenu && (
+                  <div
+                    className="absolute right-0 top-full mt-1 py-1 rounded-lg shadow-lg min-w-[140px] z-50"
+                    style={{
+                      backgroundColor: "var(--color-bg-elevated)",
+                      border: "1px solid var(--color-border)",
+                    }}
+                  >
+                    <button
+                      onClick={() => {
+                        uploadAudio();
+                        setShowMoreMenu(false);
+                      }}
+                      disabled={isUploading}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-black/5 flex items-center gap-2 disabled:opacity-50"
+                      style={{ color: "var(--color-text)" }}
+                    >
+                      {isUploading ? (
+                        <div
+                          className="w-4 h-4 border-2 border-t-transparent rounded-full animate-spin"
+                          style={{
+                            borderColor: "var(--color-text-secondary)",
+                            borderTopColor: "transparent",
+                          }}
+                        />
+                      ) : (
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={1.5}
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                          />
+                        </svg>
+                      )}
+                      Upload Audio
+                    </button>
+                    <button
+                      onClick={() => {
+                        onExport();
+                        setShowMoreMenu(false);
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-black/5 flex items-center gap-2"
+                      style={{ color: "var(--color-text)" }}
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={1.5}
+                          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                        />
                       </svg>
-                    )}
-                    Upload Audio
-                  </button>
-                  <button
-                    onClick={() => {
-                      onExport();
-                      setShowMoreMenu(false);
-                    }}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-black/5 flex items-center gap-2"
-                    style={{ color: "var(--color-text)" }}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    Export Note
-                  </button>
-                  <div className="my-1 border-t" style={{ borderColor: "var(--color-border)" }} />
-                  <button
-                    onClick={() => {
-                      onDelete();
-                      setShowMoreMenu(false);
-                    }}
-                    className="w-full px-3 py-2 text-left text-sm hover:bg-black/5 flex items-center gap-2"
-                    style={{ color: "var(--color-accent)" }}
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                    Delete
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </header>
+                      Export Note
+                    </button>
+                    <div
+                      className="my-1 border-t"
+                      style={{ borderColor: "var(--color-border)" }}
+                    />
+                    <button
+                      onClick={() => {
+                        onDelete();
+                        setShowMoreMenu(false);
+                      }}
+                      className="w-full px-3 py-2 text-left text-sm hover:bg-black/5 flex items-center gap-2"
+                      style={{ color: "var(--color-accent)" }}
+                    >
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={1.5}
+                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                        />
+                      </svg>
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </header>
 
-      {/* Recording indicator */}
-      {isRecording && (
-        <div
-          className="px-6 py-2 flex items-center gap-2"
-          style={{ backgroundColor: "var(--color-accent-light)" }}
-        >
-          <span
-            className="w-1.5 h-1.5 rounded-full animate-pulse"
-            style={{ backgroundColor: "var(--color-accent)" }}
-          />
-          <span
-            className="text-xs font-medium"
-            style={{ color: "var(--color-accent)" }}
-          >
-            Recording
-          </span>
+        {/* Recording indicator */}
+        {isRecording && (
           <div
-            className="flex-1 h-1 rounded-full overflow-hidden"
+            className="px-6 py-2 flex items-center gap-2"
             style={{ backgroundColor: "var(--color-accent-light)" }}
           >
+            <span
+              className="w-1.5 h-1.5 rounded-full animate-pulse"
+              style={{ backgroundColor: "var(--color-accent)" }}
+            />
+            <span
+              className="text-xs font-medium"
+              style={{ color: "var(--color-accent)" }}
+            >
+              Recording
+            </span>
             <div
-              className="h-full rounded-full transition-all duration-100"
-              style={{
-                width: `${Math.min(100, audioLevel * 400)}%`,
-                backgroundColor: "var(--color-accent)",
-              }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Paused indicator */}
-      {isPaused && (
-        <div
-          className="px-6 py-2 flex items-center gap-2"
-          style={{ backgroundColor: "var(--color-bg-elevated)" }}
-        >
-          <svg
-            className="w-3 h-3"
-            fill="var(--color-text-secondary)"
-            viewBox="0 0 24 24"
-          >
-            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
-          </svg>
-          <span
-            className="text-xs font-medium"
-            style={{ color: "var(--color-text-secondary)" }}
-          >
-            Paused
-          </span>
-        </div>
-      )}
-
-      {/* Tabs */}
-      <div
-        className="px-6 border-b flex gap-6"
-        style={{ borderColor: "var(--color-border)" }}
-      >
-        {(["notes", "transcript", "summary"] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => onTabChange(tab)}
-            className="py-2.5 text-sm font-medium capitalize transition-colors"
-            style={{
-              color:
-                activeTab === tab
-                  ? "var(--color-text)"
-                  : "var(--color-text-secondary)",
-              borderBottom:
-                activeTab === tab
-                  ? "2px solid var(--color-text)"
-                  : "2px solid transparent",
-              marginBottom: "-1px",
-            }}
-          >
-            {tab}
-            {tab === "transcript" && transcript.length > 0 && (
-              <span
-                className="ml-1.5 text-sm"
-                style={{ color: "var(--color-text-secondary)" }}
-              >
-                ({transcript.length})
-              </span>
-            )}
-            {tab === "summary" && summaries.length > 0 && (
-              <span
-                className="ml-1.5 text-sm"
-                style={{ color: "var(--color-text-secondary)" }}
-              >
-                ({summaries.length})
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto px-6 py-4">
-        {activeTab === "notes" && (
-          <div className="h-full flex flex-col">
-            <MarkdownEditor
-              value={descValue}
-              onChange={setDescValue}
-              onBlur={() => onUpdateDescription(descValue)}
-              placeholder="Take notes or press / for commands..."
-              noteId={note.id}
-            />
+              className="flex-1 h-1 rounded-full overflow-hidden"
+              style={{ backgroundColor: "var(--color-accent-light)" }}
+            >
+              <div
+                className="h-full rounded-full transition-all duration-100"
+                style={{
+                  width: `${Math.min(100, audioLevel * 400)}%`,
+                  backgroundColor: "var(--color-accent)",
+                }}
+              />
+            </div>
           </div>
         )}
 
-        {activeTab === "transcript" &&
-          (transcript.length > 0 ? (
-            <TranscriptSearch
-              segments={transcript}
-              audioSegments={audioSegments}
-              uploads={uploads}
-              isLive={isRecording}
-            />
-          ) : (
-            <div
-              className="text-center py-12 text-sm"
+        {/* Paused indicator */}
+        {isPaused && (
+          <div
+            className="px-6 py-2 flex items-center gap-2"
+            style={{ backgroundColor: "var(--color-bg-elevated)" }}
+          >
+            <svg
+              className="w-3 h-3"
+              fill="var(--color-text-secondary)"
+              viewBox="0 0 24 24"
+            >
+              <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+            </svg>
+            <span
+              className="text-xs font-medium"
               style={{ color: "var(--color-text-secondary)" }}
             >
-              {note.audio_path
-                ? "Transcribe this note to see the transcript"
-                : "No audio recorded"}
-            </div>
-          ))}
+              Paused
+            </span>
+          </div>
+        )}
 
-        {activeTab === "summary" && (
-          <SummaryPanel
-            summaries={summaries}
-            isGenerating={isGenerating}
-            streamingContent={streamingContent}
-            onDelete={deleteSummary}
-            onCopy={async (content) => {
-              try {
-                await exportApi.copyToClipboard(content);
-              } catch (error) {
-                console.error("Copy failed:", error);
-              }
+        {/* Tabs */}
+        <div
+          className="px-6 border-b flex gap-6"
+          style={{ borderColor: "var(--color-border)" }}
+        >
+          {(["notes", "transcript", "summary"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => onTabChange(tab)}
+              className="py-2.5 text-sm font-medium capitalize transition-colors"
+              style={{
+                color:
+                  activeTab === tab
+                    ? "var(--color-text)"
+                    : "var(--color-text-secondary)",
+                borderBottom:
+                  activeTab === tab
+                    ? "2px solid var(--color-text)"
+                    : "2px solid transparent",
+                marginBottom: "-1px",
+              }}
+            >
+              {tab}
+              {tab === "transcript" && transcript.length > 0 && (
+                <span
+                  className="ml-1.5 text-sm"
+                  style={{ color: "var(--color-text-secondary)" }}
+                >
+                  ({transcript.length})
+                </span>
+              )}
+              {tab === "summary" && summaries.length > 0 && (
+                <span
+                  className="ml-1.5 text-sm"
+                  style={{ color: "var(--color-text-secondary)" }}
+                >
+                  ({summaries.length})
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {activeTab === "notes" && (
+            <div className="h-full flex flex-col">
+              <MarkdownEditor
+                value={descValue}
+                onChange={setDescValue}
+                onBlur={() => onUpdateDescription(descValue)}
+                placeholder="Take notes or press / for commands..."
+                noteId={note.id}
+              />
+            </div>
+          )}
+
+          {activeTab === "transcript" &&
+            (transcript.length > 0 ? (
+              <TranscriptSearch
+                segments={transcript}
+                audioSegments={audioSegments}
+                uploads={uploads}
+                isLive={isRecording}
+              />
+            ) : (
+              <div
+                className="text-center py-12 text-sm"
+                style={{ color: "var(--color-text-secondary)" }}
+              >
+                {note.audio_path
+                  ? "Transcribe this note to see the transcript"
+                  : "No audio recorded"}
+              </div>
+            ))}
+
+          {activeTab === "summary" && (
+            <SummaryPanel
+              summaries={summaries}
+              isGenerating={isGenerating}
+              streamingContent={streamingContent}
+              onDelete={deleteSummary}
+              onCopy={async (content) => {
+                try {
+                  await exportApi.copyToClipboard(content);
+                } catch (error) {
+                  console.error("Copy failed:", error);
+                }
+              }}
+            />
+          )}
+        </div>
+
+        {/* Audio Player - show when there's audio to play and not recording */}
+        {!isRecording && playingAudioPath && (
+          <AudioPlayer
+            ref={audioPlayerRef}
+            audioPath={playingAudioPath}
+            title={note.title}
+            autoPlay={shouldAutoPlay}
+            onAutoPlayHandled={() => setShouldAutoPlay(false)}
+            // Audio files list props
+            uploads={uploads}
+            segments={audioSegments}
+            mainAudioPath={note.audio_path}
+            isTranscribing={isTranscribingUpload}
+            onTranscribe={async (uploadId) => {
+              await transcribeUpload(uploadId);
+              onTranscriptUpdated?.();
             }}
+            onDeleteUpload={deleteUpload}
+            onReorder={handleAudioReorder}
+            onPlayAudio={handlePlayAudio}
           />
         )}
-      </div>
-
-      {/* Audio Player - show when there's audio to play and not recording */}
-      {!isRecording && playingAudioPath && (
-        <AudioPlayer
-          ref={audioPlayerRef}
-          audioPath={playingAudioPath}
-          title={note.title}
-          autoPlay={shouldAutoPlay}
-          onAutoPlayHandled={() => setShouldAutoPlay(false)}
-          // Audio files list props
-          uploads={uploads}
-          segments={audioSegments}
-          mainAudioPath={note.audio_path}
-          isTranscribing={isTranscribingUpload}
-          onTranscribe={async (uploadId) => {
-            await transcribeUpload(uploadId);
-            onTranscriptUpdated?.();
-          }}
-          onDeleteUpload={deleteUpload}
-          onReorder={handleAudioReorder}
-          onPlayAudio={handlePlayAudio}
-        />
-      )}
       </div>
 
       {/* AI Sidebar */}
@@ -2239,6 +2520,25 @@ function ContextMenu({ x, y, type, onAction }: ContextMenuProps) {
   const menuItems =
     type === "note"
       ? [
+          {
+            id: "rename",
+            label: "Rename",
+            icon: (
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+                />
+              </svg>
+            ),
+          },
           {
             id: "delete",
             label: "Delete",

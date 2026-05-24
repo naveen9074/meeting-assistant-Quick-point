@@ -69,6 +69,105 @@ fn is_echo_of_system(
     false
 }
 
+/// Validate that a WAV file exists and has valid audio content
+/// Returns (is_valid, reason_if_invalid)
+fn validate_audio_file(path: &PathBuf) -> (bool, Option<String>) {
+    // Check if file exists
+    if !path.exists() {
+        return (false, Some(format!("Audio file not found: {}", path.display())));
+    }
+
+    // Check if file has content (minimum 44 bytes for WAV header + some audio data)
+    match std::fs::metadata(path) {
+        Ok(metadata) => {
+            let size = metadata.len();
+            if size < 100 {
+                return (false, Some(format!("Audio file too small ({} bytes), may be corrupted", size)));
+            }
+        }
+        Err(e) => {
+            return (false, Some(format!("Cannot read audio file metadata: {}", e)));
+        }
+    }
+
+    // Try to read WAV header to validate format
+    match std::fs::read(path) {
+        Ok(data) => {
+            // Basic WAV header validation
+            if data.len() < 44 {
+                return (false, Some("Audio file too small, incomplete WAV header".to_string()));
+            }
+
+            // Check RIFF signature
+            if &data[0..4] != b"RIFF" {
+                return (false, Some("Invalid audio file: not a valid WAV file (missing RIFF signature)".to_string()));
+            }
+
+            // Check WAVE signature at offset 8
+            if &data[8..12] != b"WAVE" {
+                return (false, Some("Invalid audio file: not a valid WAV file (missing WAVE signature)".to_string()));
+            }
+
+            // Try to parse audio info to estimate duration
+            // This is a rough check to detect if audio data is present
+            // Looking for fmt and data chunks
+            let mut has_fmt = false;
+            let mut has_data = false;
+            let mut data_size = 0u32;
+
+            let mut pos = 12;
+            while pos + 8 <= data.len() {
+                let chunk_id = &data[pos..pos+4];
+                let chunk_size_bytes = &data[pos+4..pos+8];
+                let chunk_size = u32::from_le_bytes([
+                    chunk_size_bytes[0], chunk_size_bytes[1],
+                    chunk_size_bytes[2], chunk_size_bytes[3]
+                ]) as usize;
+
+                match chunk_id {
+                    b"fmt " => has_fmt = true,
+                    b"data" => {
+                        has_data = true;
+                        data_size = chunk_size as u32;
+                    }
+                    _ => {}
+                }
+
+                pos += 8 + chunk_size;
+                if pos > data.len() {
+                    break;
+                }
+            }
+
+            if !has_fmt {
+                return (false, Some("Audio file missing format chunk".to_string()));
+            }
+
+            if !has_data {
+                return (false, Some("Audio file has no audio data".to_string()));
+            }
+
+            if data_size == 0 {
+                return (false, Some("Audio file has empty data chunk".to_string()));
+            }
+
+            // Rough estimate: assume 16-bit, 16kHz for minimum duration check
+            // Approximately 2 bytes per sample at 16kHz = 32k bytes per second
+            // We need at least ~16k bytes for 0.5 seconds (to be lenient)
+            if data_size < 8000 {
+                eprintln!("[validate_audio_file] Warning: Audio file very short ({} bytes, ~0.25s)", data_size);
+                // Don't fail for very short files, just warn
+                // Some platforms might record legitimate very short clips
+            }
+
+            (true, None)
+        }
+        Err(e) => {
+            (false, Some(format!("Cannot read audio file: {}", e)))
+        }
+    }
+}
+
 /// State for transcription operations
 pub struct TranscriptionState {
     pub model_manager: Mutex<Option<ModelManager>>,
@@ -317,20 +416,22 @@ pub async fn transcribe_audio(
         }
     }
 
-    // If session_id provided, insert full transcript text into transcripts table
+    // If session_id provided, insert full transcript text into interview_transcripts table
     if let Some(sid) = session_id {
         let transcript_text = result.segments.iter()
             .filter(|s| !should_skip_segment(&s.text))
             .map(|s| s.text.as_str())
             .collect::<Vec<_>>()
             .join(" ");
-        let conn = crate::db::get_connection().map_err(|e| e.to_string())?;
-        let t_id = uuid::Uuid::new_v4().to_string();
-        let now = chrono::Utc::now().to_rfc3339();
-        let _ = conn.execute(
-            "INSERT INTO transcripts (id, session_id, audio_segment_id, content, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-            rusqlite::params![t_id, sid, audio_segment_id, &transcript_text, now],
-        );
+        if !transcript_text.trim().is_empty() {
+            let conn = crate::db::get_connection().map_err(|e| e.to_string())?;
+            let t_id = uuid::Uuid::new_v4().to_string();
+            let now = chrono::Utc::now().to_rfc3339();
+            let _ = conn.execute(
+                "INSERT INTO interview_transcripts (id, session_id, audio_segment_id, content, speaker, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![t_id, sid, audio_segment_id, &transcript_text, speaker, now],
+            );
+        }
     }
 
     state.is_transcribing.store(false, Ordering::SeqCst);
@@ -365,6 +466,8 @@ pub async fn transcribe_dual_audio(
     mic_path: String,
     system_path: Option<String>,
     note_id: String,
+    session_id: Option<String>,
+    audio_segment_id: Option<String>,
     state: State<'_, TranscriptionState>,
     db: State<'_, Database>,
 ) -> Result<DualTranscriptionResult, String> {
@@ -402,6 +505,7 @@ pub async fn transcribe_dual_audio(
         })?;
 
     // Save mic segments to database with "You" speaker label (skip blank/noise)
+    let mut mic_text_vec = Vec::new();
     for segment in &mic_result.segments {
         if !should_skip_segment(&segment.text) {
             db.add_transcript_segment(
@@ -415,41 +519,84 @@ pub async fn transcribe_dual_audio(
             )
             .map_err(|e| e.to_string())?;
             total_segments += 1;
+            mic_text_vec.push(segment.text.clone());
+        }
+    }
+
+    if let Some(ref sid) = session_id {
+        let transcript_text = mic_text_vec.join(" ");
+        if !transcript_text.trim().is_empty() {
+            if let Ok(conn) = crate::db::get_connection() {
+                let t_id = uuid::Uuid::new_v4().to_string();
+                let now = chrono::Utc::now().to_rfc3339();
+                let _ = conn.execute(
+                    "INSERT INTO interview_transcripts (id, session_id, audio_segment_id, content, speaker, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    rusqlite::params![t_id, sid, audio_segment_id, &transcript_text, "You", now],
+                );
+            }
         }
     }
 
     // Transcribe system audio if provided (labeled as "Others")
     let system_result = if let Some(sys_path) = system_path {
         let sys_path_buf = PathBuf::from(&sys_path);
-        let transcriber_clone = transcriber.clone();
+        
+        // PRIORITY 1: Validate system audio file before attempting transcription
+        let (is_valid, error_msg) = validate_audio_file(&sys_path_buf);
+        
+        if !is_valid {
+            // Skip invalid system audio files gracefully - don't fail the whole operation
+            eprintln!("[transcribe_dual_audio] Skipping invalid system audio: {}", error_msg.unwrap_or_default());
+            None
+        } else {
+            let transcriber_clone = transcriber.clone();
 
-        match tokio::task::spawn_blocking(move || transcriber_clone.transcribe(&sys_path_buf)).await {
-            Ok(Ok(result)) => {
-                // Save system segments to database with "Others" speaker label (skip blank/noise)
-                for segment in &result.segments {
-                    if !should_skip_segment(&segment.text) {
-                        db.add_transcript_segment(
-                            &note_id,
-                            segment.start_time,
-                            segment.end_time,
-                            &segment.text,
-                            Some("Others"),
-                            None,
-                            None,
-                        )
-                        .map_err(|e| e.to_string())?;
-                        total_segments += 1;
+            match tokio::task::spawn_blocking(move || transcriber_clone.transcribe(&sys_path_buf)).await {
+                Ok(Ok(result)) => {
+                    // Save system segments to database with "Others" speaker label (skip blank/noise)
+                    let mut system_text_vec = Vec::new();
+                    for segment in &result.segments {
+                        if !should_skip_segment(&segment.text) {
+                            db.add_transcript_segment(
+                                &note_id,
+                                segment.start_time,
+                                segment.end_time,
+                                &segment.text,
+                                Some("Others"),
+                                None,
+                                None,
+                            )
+                            .map_err(|e| e.to_string())?;
+                            total_segments += 1;
+                            system_text_vec.push(segment.text.clone());
+                        }
                     }
+
+                    if let Some(ref sid) = session_id {
+                        let transcript_text = system_text_vec.join(" ");
+                        if !transcript_text.trim().is_empty() {
+                            if let Ok(conn) = crate::db::get_connection() {
+                                let t_id = uuid::Uuid::new_v4().to_string();
+                                let now = chrono::Utc::now().to_rfc3339();
+                                let _ = conn.execute(
+                                    "INSERT INTO interview_transcripts (id, session_id, audio_segment_id, content, speaker, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                                    rusqlite::params![t_id, sid, audio_segment_id, &transcript_text, "Others", now],
+                                );
+                            }
+                        }
+                    }
+                    Some(result)
                 }
-                Some(result)
-            }
-            Ok(Err(e)) => {
-                eprintln!("Failed to transcribe system audio: {}", e);
-                None
-            }
-            Err(e) => {
-                eprintln!("Failed to spawn system audio transcription task: {}", e);
-                None
+                Ok(Err(e)) => {
+                    // System audio transcription failed, but this shouldn't fail the whole operation
+                    eprintln!("[transcribe_dual_audio] Failed to transcribe system audio: {}", e);
+                    None
+                }
+                Err(e) => {
+                    // Spawn task failed, skip system audio
+                    eprintln!("[transcribe_dual_audio] Failed to spawn system audio transcription task: {}", e);
+                    None
+                }
             }
         }
     } else {
@@ -595,34 +742,43 @@ pub async fn retranscribe_audio_segment(
     // Transcribe SYSTEM audio FIRST to collect segments for echo detection
     if let Some(sys_path) = &segment.system_path {
         let sys_path_buf = PathBuf::from(sys_path);
-        let transcriber_clone = transcriber.clone();
+        
+        // PRIORITY 1: Validate system audio file before attempting transcription
+        let (is_valid, error_msg) = validate_audio_file(&sys_path_buf);
+        
+        if !is_valid {
+            // Skip invalid system audio files gracefully
+            eprintln!("[retranscribe_audio_segment] Skipping invalid system audio: {}", error_msg.unwrap_or_default());
+        } else {
+            let transcriber_clone = transcriber.clone();
 
-        match tokio::task::spawn_blocking(move || transcriber_clone.transcribe(&sys_path_buf)).await {
-            Ok(Ok(result)) => {
-                for seg in &result.segments {
-                    if !should_skip_segment(&seg.text) {
-                        // Store for echo detection
-                        system_segments_for_echo.push((seg.start_time, seg.end_time, seg.text.clone()));
+            match tokio::task::spawn_blocking(move || transcriber_clone.transcribe(&sys_path_buf)).await {
+                Ok(Ok(result)) => {
+                    for seg in &result.segments {
+                        if !should_skip_segment(&seg.text) {
+                            // Store for echo detection
+                            system_segments_for_echo.push((seg.start_time, seg.end_time, seg.text.clone()));
 
-                        db.add_transcript_segment(
-                            &segment.note_id,
-                            seg.start_time,
-                            seg.end_time,
-                            &seg.text,
-                            Some("Others"),
-                            Some("segment"),
-                            Some(segment_id),
-                        )
-                        .map_err(|e| e.to_string())?;
-                        total_segments += 1;
+                            db.add_transcript_segment(
+                                &segment.note_id,
+                                seg.start_time,
+                                seg.end_time,
+                                &seg.text,
+                                Some("Others"),
+                                Some("segment"),
+                                Some(segment_id),
+                            )
+                            .map_err(|e| e.to_string())?;
+                            total_segments += 1;
+                        }
                     }
                 }
-            }
-            Ok(Err(e)) => {
-                eprintln!("Failed to transcribe system audio: {}", e);
-            }
-            Err(e) => {
-                eprintln!("Failed to spawn system audio transcription task: {}", e);
+                Ok(Err(e)) => {
+                    eprintln!("[retranscribe_audio_segment] Failed to transcribe system audio: {}", e);
+                }
+                Err(e) => {
+                    eprintln!("[retranscribe_audio_segment] Failed to spawn system audio transcription task: {}", e);
+                }
             }
         }
     }
@@ -693,6 +849,21 @@ pub async fn retranscribe_note(
             state.is_transcribing.store(false, Ordering::SeqCst);
             "No model loaded. Please load a Whisper model first.".to_string()
         })?
+    };
+
+    // Get the session_id for this note if it exists
+    let session_id: Option<String> = {
+        if let Ok(conn) = db.conn.lock() {
+            conn.query_row(
+                "SELECT session_id FROM notes WHERE id = ?1",
+                [&note_id],
+                |row| row.get(0),
+            )
+            .ok()
+            .flatten()
+        } else {
+            None
+        }
     };
 
     // Get all audio segments and uploads for this note
@@ -781,85 +952,105 @@ pub async fn retranscribe_note(
         let mut system_segments_for_echo: Vec<(f64, f64, String)> = Vec::new();
 
         if let Some(sys_path) = &actual_system_path {
-            println!("[retranscribe_note] Transcribing system FIRST: {:?}", sys_path);
-            let sys_path_clone = sys_path.clone();
-            let transcriber_clone = transcriber.clone();
+            // PRIORITY 1: Validate system audio file before attempting transcription
+            let (is_valid, error_msg) = validate_audio_file(&sys_path);
+            
+            if !is_valid {
+                // Skip invalid system audio files gracefully - don't fail the segment
+                eprintln!("[retranscribe_note] Skipping invalid system audio: {}", error_msg.unwrap_or_default());
+            } else {
+                println!("[retranscribe_note] Transcribing system: {:?}", sys_path);
+                let sys_path_clone = sys_path.clone();
+                let transcriber_clone = transcriber.clone();
 
-            match tokio::task::spawn_blocking(move || transcriber_clone.transcribe(&sys_path_clone)).await {
-                Ok(Ok(result)) => {
-                    println!("[retranscribe_note] System transcription succeeded, {} segments", result.segments.len());
-                    for seg in &result.segments {
-                        if !should_skip_segment(&seg.text) {
-                            // Store for echo detection
-                            system_segments_for_echo.push((seg.start_time, seg.end_time, seg.text.clone()));
+                match tokio::task::spawn_blocking(move || transcriber_clone.transcribe(&sys_path_clone)).await {
+                    Ok(Ok(result)) => {
+                        println!("[retranscribe_note] System transcription succeeded, {} segments", result.segments.len());
+                        for seg in &result.segments {
+                            if !should_skip_segment(&seg.text) {
+                                // Store for echo detection
+                                system_segments_for_echo.push((seg.start_time, seg.end_time, seg.text.clone()));
 
-                            if let Ok(_) = db.add_transcript_segment(
-                                &note_id,
-                                seg.start_time,
-                                seg.end_time,
-                                &seg.text,
-                                Some("Others"),
-                                Some("segment"),
-                                Some(segment.id),
-                            ) {
-                                total_segments_created += 1;
+                                if let Ok(_) = db.add_transcript_segment(
+                                    &note_id,
+                                    seg.start_time,
+                                    seg.end_time,
+                                    &seg.text,
+                                    Some("Others"),
+                                    Some("segment"),
+                                    Some(segment.id),
+                                ) {
+                                    total_segments_created += 1;
+                                }
                             }
                         }
                     }
-                }
-                Ok(Err(e)) => {
-                    eprintln!("Failed to transcribe system audio for segment {}: {}", segment.id, e);
-                }
-                Err(e) => {
-                    eprintln!("Failed to spawn system audio transcription for segment {}: {}", segment.id, e);
+                    Ok(Err(e)) => {
+                        eprintln!("[retranscribe_note] Failed to transcribe system audio for segment {}: {}", segment.id, e);
+                        // Don't add to failed_items - we skip system audio gracefully
+                    }
+                    Err(e) => {
+                        eprintln!("[retranscribe_note] Failed to spawn system audio transcription for segment {}: {}", segment.id, e);
+                        // Don't add to failed_items - we skip system audio gracefully
+                    }
                 }
             }
         }
 
         // Now transcribe mic audio and filter out echoes
-        println!("[retranscribe_note] Transcribing mic: {:?}", actual_mic_path);
-        let mic_path_for_task = actual_mic_path.clone();
-        let transcriber_clone = transcriber.clone();
+        // PRIORITY 1: Validate mic audio file before attempting transcription
+        let (is_mic_valid, mic_error_msg) = validate_audio_file(&actual_mic_path);
+        
+        if !is_mic_valid {
+            // Mic audio is invalid - this is a real error since we need at least mic
+            let error_str = mic_error_msg.unwrap_or_else(|| "Unknown error".to_string());
+            println!("[retranscribe_note] Mic audio validation failed: {}", error_str);
+            failed_items.push(format!("{} (mic): {}", item_name, error_str));
+        } else {
+            println!("[retranscribe_note] Transcribing mic: {:?}", actual_mic_path);
+            let mic_path_for_task = actual_mic_path.clone();
+            let transcriber_clone = transcriber.clone();
 
-        match tokio::task::spawn_blocking(move || transcriber_clone.transcribe(&mic_path_for_task)).await {
-            Ok(Ok(result)) => {
-                println!("[retranscribe_note] Mic transcription succeeded, {} segments", result.segments.len());
-                let mut echo_filtered = 0;
-                for seg in &result.segments {
-                    if should_skip_segment(&seg.text) {
-                        continue;
+            match tokio::task::spawn_blocking(move || transcriber_clone.transcribe(&mic_path_for_task)).await {
+                Ok(Ok(result)) => {
+                    println!("[retranscribe_note] Mic transcription succeeded, {} segments", result.segments.len());
+                    let mut echo_filtered = 0;
+                    for seg in &result.segments {
+                        if should_skip_segment(&seg.text) {
+                            continue;
+                        }
+
+                        // Filter out segments that are echoes of system audio
+                        if is_echo_of_system(&seg.text, seg.start_time, seg.end_time, &system_segments_for_echo) {
+                            println!("[retranscribe_note] Filtered echo: \"{}\"", seg.text);
+                            echo_filtered += 1;
+                            continue;
+                        }
+
+                        if let Ok(_) = db.add_transcript_segment(
+                            &note_id,
+                            seg.start_time,
+                            seg.end_time,
+                            &seg.text,
+                            Some("You"),
+                            Some("segment"),
+                            Some(segment.id),
+                        ) {
+                            total_segments_created += 1;
+                        }
                     }
-
-                    // Filter out segments that are echoes of system audio
-                    if is_echo_of_system(&seg.text, seg.start_time, seg.end_time, &system_segments_for_echo) {
-                        println!("[retranscribe_note] Filtered echo: \"{}\"", seg.text);
-                        echo_filtered += 1;
-                        continue;
-                    }
-
-                    if let Ok(_) = db.add_transcript_segment(
-                        &note_id,
-                        seg.start_time,
-                        seg.end_time,
-                        &seg.text,
-                        Some("You"),
-                        Some("segment"),
-                        Some(segment.id),
-                    ) {
-                        total_segments_created += 1;
+                    if echo_filtered > 0 {
+                        println!("[retranscribe_note] Filtered {} echo segments from mic", echo_filtered);
                     }
                 }
-                if echo_filtered > 0 {
-                    println!("[retranscribe_note] Filtered {} echo segments from mic", echo_filtered);
+                Ok(Err(e)) => {
+                    println!("[retranscribe_note] Mic transcription error: {}", e);
+                    failed_items.push(format!("{} (mic): {}", item_name, e));
                 }
-            }
-            Ok(Err(e)) => {
-                println!("[retranscribe_note] Mic transcription error: {}", e);
-                failed_items.push(format!("{} (mic): {}", item_name, e));
-            }
-            Err(e) => {
-                println!("[retranscribe_note] Mic task error: {}", e);
-                failed_items.push(format!("{} (mic): {}", item_name, e));
+                Err(e) => {
+                    println!("[retranscribe_note] Mic task error: {}", e);
+                    failed_items.push(format!("{} (mic): {}", item_name, e));
+                }
             }
         }
 
@@ -888,36 +1079,48 @@ pub async fn retranscribe_note(
             continue;
         }
 
-        // Transcribe
+        // Transcribe - but first validate the file
         let file_path = PathBuf::from(&upload.file_path);
-        let transcriber_clone = transcriber.clone();
+        
+        // PRIORITY 1: Validate uploaded audio file before attempting transcription
+        let (is_valid, error_msg) = validate_audio_file(&file_path);
+        
+        if !is_valid {
+            // Invalid audio file - mark as failed
+            let error_str = error_msg.unwrap_or_else(|| "Invalid audio file".to_string());
+            eprintln!("[retranscribe_note] Skipping invalid uploaded audio: {}", error_str);
+            let _ = db.update_uploaded_audio_status(upload.id, "failed");
+            failed_items.push(format!("{}: {}", item_name, error_str));
+        } else {
+            let transcriber_clone = transcriber.clone();
 
-        match tokio::task::spawn_blocking(move || transcriber_clone.transcribe(&file_path)).await {
-            Ok(Ok(result)) => {
-                for seg in &result.segments {
-                    if !should_skip_segment(&seg.text) {
-                        if let Ok(_) = db.add_transcript_segment(
-                            &note_id,
-                            seg.start_time,
-                            seg.end_time,
-                            &seg.text,
-                            Some(&upload.speaker_label),
-                            Some("upload"),
-                            Some(upload.id),
-                        ) {
-                            total_segments_created += 1;
+            match tokio::task::spawn_blocking(move || transcriber_clone.transcribe(&file_path)).await {
+                Ok(Ok(result)) => {
+                    for seg in &result.segments {
+                        if !should_skip_segment(&seg.text) {
+                            if let Ok(_) = db.add_transcript_segment(
+                                &note_id,
+                                seg.start_time,
+                                seg.end_time,
+                                &seg.text,
+                                Some(&upload.speaker_label),
+                                Some("upload"),
+                                Some(upload.id),
+                            ) {
+                                total_segments_created += 1;
+                            }
                         }
                     }
+                    let _ = db.update_uploaded_audio_status(upload.id, "completed");
                 }
-                let _ = db.update_uploaded_audio_status(upload.id, "completed");
-            }
-            Ok(Err(e)) => {
-                let _ = db.update_uploaded_audio_status(upload.id, "failed");
-                failed_items.push(format!("{}: {}", item_name, e));
-            }
-            Err(e) => {
-                let _ = db.update_uploaded_audio_status(upload.id, "failed");
-                failed_items.push(format!("{}: {}", item_name, e));
+                Ok(Err(e)) => {
+                    let _ = db.update_uploaded_audio_status(upload.id, "failed");
+                    failed_items.push(format!("{}: {}", item_name, e));
+                }
+                Err(e) => {
+                    let _ = db.update_uploaded_audio_status(upload.id, "failed");
+                    failed_items.push(format!("{}: {}", item_name, e));
+                }
             }
         }
 

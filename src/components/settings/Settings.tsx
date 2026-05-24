@@ -33,7 +33,11 @@ interface SettingsProps {
 
 const DEFAULT_TAB: SettingsTab = "about";
 
-export function Settings({ onClose, initialTab = DEFAULT_TAB, onTabChange }: SettingsProps) {
+export function Settings({
+  onClose,
+  initialTab = DEFAULT_TAB,
+  onTabChange,
+}: SettingsProps) {
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const { profile } = useProfile();
 
@@ -51,13 +55,24 @@ export function Settings({ onClose, initialTab = DEFAULT_TAB, onTabChange }: Set
   const { loadedModel } = useModels();
   const { isRunning: ollamaRunning, selectedModel: ollamaModel } = useOllama();
   const { available: updateAvailable } = useUpdater();
-  const { micAvailable, micPermission, systemAudioSupported, systemAudioPermission, loading: systemLoading, refresh: refreshSystemStatus } = useSystemStatus();
+  const {
+    micAvailable,
+    micPermission,
+    systemAudioSupported,
+    systemAudioPermission,
+    loading: systemLoading,
+    refresh: refreshSystemStatus,
+  } = useSystemStatus();
 
   // Check if each setting needs attention
   const profileNeedsSetup = !profile.name;
   const whisperNeedsSetup = !loadedModel;
   const ollamaNeedsSetup = !ollamaRunning || !ollamaModel;
-  const systemNeedsSetup = !systemLoading && (!micAvailable || !micPermission || (systemAudioSupported && !systemAudioPermission));
+  const systemNeedsSetup =
+    !systemLoading &&
+    (!micAvailable ||
+      !micPermission ||
+      (systemAudioSupported && !systemAudioPermission));
 
   type TabItem = {
     id: SettingsTab;
@@ -300,15 +315,16 @@ export function Settings({ onClose, initialTab = DEFAULT_TAB, onTabChange }: Set
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: "rgba(0, 0, 0, 0.4)" }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay"
+      style={{ backgroundColor: "rgba(0, 0, 0, 0.45)" }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
-        className="w-full max-w-4xl rounded-2xl overflow-hidden flex"
+        className="w-full max-w-4xl rounded-2xl overflow-hidden flex modal-card"
         style={{
           backgroundColor: "var(--color-bg-elevated)",
-          boxShadow: "var(--shadow-lg)",
+          boxShadow:
+            "0 20px 60px rgba(0,0,0,0.18), 0 0 0 1px var(--color-border)",
           height: "600px",
         }}
       >
@@ -404,7 +420,9 @@ export function Settings({ onClose, initialTab = DEFAULT_TAB, onTabChange }: Set
           <div className="flex-1 overflow-y-auto p-5">
             {activeTab === "profile" && <ProfileTab />}
             {activeTab === "appearance" && <AppearanceTab />}
-            {activeTab === "system" && <SystemTab onPermissionChange={refreshSystemStatus} />}
+            {activeTab === "system" && (
+              <SystemTab onPermissionChange={refreshSystemStatus} />
+            )}
             {activeTab === "whisper" && <WhisperTab />}
             {activeTab === "ollama" && <OllamaTab />}
             {activeTab === "privacy" && <PrivacyTab />}

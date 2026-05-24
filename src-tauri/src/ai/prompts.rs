@@ -119,12 +119,20 @@ RESPONSE:"#
     pub fn overview(transcript: &str, notes: Option<&str>) -> String {
         let notes_section = Self::format_notes_section(notes);
         format!(
-            r#"Summarize this transcript in markdown. Only include what was actually said. If brief, keep summary brief.
-{}{}
+            r#"You are a professional meeting summarizer. Summarize the following transcript in clear markdown format.
 
-Summary:"#,
-            notes_section,
-            transcript
+Only include what was actually discussed. Keep it concise and professional. Do NOT use emojis.
+{}
+TRANSCRIPT:
+{}
+
+Provide:
+- A brief overview paragraph
+- Key points (as bullet list)
+- Action items if any were mentioned (as bullet list)
+
+SUMMARY:"#,
+            notes_section, transcript
         )
     }
 
@@ -435,7 +443,11 @@ KEY DECISIONS:"#,
     }
 
     /// Merge custom prompt chunk results
-    pub fn merge_custom(chunk_summaries: &[String], user_prompt: &str, notes: Option<&str>) -> String {
+    pub fn merge_custom(
+        chunk_summaries: &[String],
+        user_prompt: &str,
+        notes: Option<&str>,
+    ) -> String {
         let notes_section = Self::format_notes_section(notes);
         let summaries = chunk_summaries
             .iter()
@@ -472,7 +484,12 @@ FINAL RESPONSE:"#,
     }
 
     /// Custom prompt for a single chunk
-    pub fn chunk_custom(chunk: &str, user_prompt: &str, chunk_num: usize, total_chunks: usize) -> String {
+    pub fn chunk_custom(
+        chunk: &str,
+        user_prompt: &str,
+        chunk_num: usize,
+        total_chunks: usize,
+    ) -> String {
         format!(
             r#"You are analyzing part {chunk_num} of {total_chunks} from a longer transcript for the user's request.
 

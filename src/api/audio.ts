@@ -12,7 +12,10 @@ export interface DualRecordingResult {
 
 export const audioApi = {
   // Basic recording (mic only)
-  startRecording: (noteId: string, sessionId?: string | null): Promise<string> => {
+  startRecording: (
+    noteId: string,
+    sessionId?: string | null
+  ): Promise<string> => {
     return invoke("start_recording", { noteId, sessionId: sessionId ?? null });
   },
 
@@ -46,8 +49,14 @@ export const audioApi = {
 
   // Dual recording (mic + system audio)
   /** Start recording both mic and system audio */
-  startDualRecording: (noteId: string, sessionId?: string | null): Promise<DualRecordingResult> => {
-    return invoke("start_dual_recording", { noteId, sessionId: sessionId ?? null });
+  startDualRecording: (
+    noteId: string,
+    sessionId?: string | null
+  ): Promise<DualRecordingResult> => {
+    return invoke("start_dual_recording", {
+      noteId,
+      sessionId: sessionId ?? null,
+    });
   },
 
   /** Stop dual recording and merge files for playback */
@@ -56,7 +65,9 @@ export const audioApi = {
   },
 
   /** Stop dual recording with segment tracking - updates segment duration in database */
-  stopDualRecordingWithSegments: (noteId: string): Promise<DualRecordingResult> => {
+  stopDualRecordingWithSegments: (
+    noteId: string
+  ): Promise<DualRecordingResult> => {
     return invoke("stop_dual_recording_with_segments", { noteId });
   },
 
@@ -83,6 +94,16 @@ export const audioApi = {
     return invoke("get_recording_phase");
   },
 
+  /** Pause mic-only recording - returns duration of paused segment in ms */
+  pauseRecordingCmd: (): Promise<number> => {
+    return invoke("pause_recording_cmd");
+  },
+
+  /** Resume mic-only recording after pause - returns new segment path */
+  resumeRecordingCmd: (noteId: string): Promise<string> => {
+    return invoke("resume_recording_cmd", { noteId });
+  },
+
   /** Pause dual recording - returns duration of paused segment in ms */
   pauseDualRecording: (): Promise<number> => {
     return invoke("pause_dual_recording");
@@ -91,6 +112,14 @@ export const audioApi = {
   /** Resume dual recording after pause */
   resumeDualRecording: (noteId: string): Promise<DualRecordingResult> => {
     return invoke("resume_dual_recording", { noteId });
+  },
+
+  /** Continue mic-only recording on an ended note (creates a new segment) */
+  startRecordingSegment: (
+    noteId: string,
+    sessionId?: string | null
+  ): Promise<string> => {
+    return invoke("start_recording", { noteId, sessionId: sessionId ?? null });
   },
 
   /** Start dual recording with segment tracking */

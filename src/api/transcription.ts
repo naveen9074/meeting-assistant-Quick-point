@@ -68,9 +68,17 @@ export const transcriptionApi = {
   transcribeDualAudio: (
     micPath: string,
     systemPath: string | null,
-    noteId: string
+    noteId: string,
+    sessionId?: string | null,
+    audioSegmentId?: string | null
   ): Promise<DualTranscriptionResult> => {
-    return invoke("transcribe_dual_audio", { micPath, systemPath, noteId });
+    return invoke("transcribe_dual_audio", {
+      micPath,
+      systemPath,
+      noteId,
+      sessionId: sessionId ?? null,
+      audioSegmentId: audioSegmentId ?? null,
+    });
   },
 
   isTranscribing: (): Promise<boolean> => {

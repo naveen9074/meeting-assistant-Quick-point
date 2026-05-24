@@ -7,6 +7,12 @@ export function AboutTab() {
       {/* Logo and App Name */}
       <div className="text-center">
         <LogoImage className="w-32 h-auto mx-auto mb-4" />
+        <h2
+          className="text-lg font-semibold mt-2"
+          style={{ color: "var(--color-text)" }}
+        >
+          QuickPoint AI Meeting Assistant
+        </h2>
         <p
           className="text-sm mt-1"
           style={{ color: "var(--color-text-secondary)" }}
@@ -14,25 +20,30 @@ export function AboutTab() {
           Version {APP_VERSION}
         </p>
         <p
-          className="text-sm mt-2"
-          style={{ color: "var(--color-text-secondary)" }}
+          className="text-xs mt-1 font-medium"
+          style={{ color: "var(--color-accent)" }}
         >
-          AI Interview & Meeting Assistant
+          AI-Based Real-Time Communication Enhancement System
         </p>
       </div>
 
-      {/* Description */}
+      {/* Project Info */}
       <div
         className="p-4 rounded-xl text-center"
         style={{ backgroundColor: "var(--color-bg-subtle)" }}
       >
         <p className="text-sm" style={{ color: "var(--color-text)" }}>
-          A privacy-focused notes app with local AI transcription and
-          summarization.
+          Final Year MCA Project — AI-Based Meeting Assistant
+        </p>
+        <p
+          className="text-xs mt-1"
+          style={{ color: "var(--color-text-secondary)" }}
+        >
+          Developed as MCA Final Year Project
         </p>
       </div>
 
-      {/* Privacy Commitment */}
+      {/* Privacy First */}
       <div
         className="p-4 rounded-xl"
         style={{ backgroundColor: "rgba(34, 197, 94, 0.06)" }}
@@ -85,11 +96,15 @@ export function AboutTab() {
         >
           <li className="flex items-center gap-2">
             <span style={{ color: "var(--color-accent)" }}>•</span>
-            Local speech-to-text with Whisper
+            Real-time speech-to-text with Whisper (local)
           </li>
           <li className="flex items-center gap-2">
             <span style={{ color: "var(--color-accent)" }}>•</span>
-            AI summaries powered by Ollama
+            AI meeting summaries powered by Ollama (local)
+          </li>
+          <li className="flex items-center gap-2">
+            <span style={{ color: "var(--color-accent)" }}>•</span>
+            Action item and key decision extraction
           </li>
           <li className="flex items-center gap-2">
             <span style={{ color: "var(--color-accent)" }}>•</span>
@@ -102,43 +117,43 @@ export function AboutTab() {
         </ul>
       </div>
 
-      {/* Credits */}
-      <div className="space-y-3 text-center">
-        <p className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>
-          Built with <span style={{ color: "#ef4444" }}>♥</span> by{" "}
-          <a
-            href="https://ctmakes.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:opacity-80"
-            style={{ color: "var(--color-accent)" }}
-          >
-            @ctmakes
-          </a>
-        </p>
-        <p className="text-xs" style={{ color: "var(--color-text-tertiary)" }}>
-          If you like this app, consider checking out{" "}
-          <a
-            href="https://leapcount.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:opacity-80"
-            style={{ color: "var(--color-accent)" }}
-          >
-            Leapcount
-          </a>
-          {" and "}
-          <a
-            href="https://zapyap.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline hover:opacity-80"
-            style={{ color: "var(--color-accent)" }}
-          >
-            ZapYap
-          </a>{" "}
-          as well.
-        </p>
+      {/* Tech Stack */}
+      <div className="space-y-2">
+        <h4
+          className="text-xs font-medium uppercase tracking-wider"
+          style={{ color: "var(--color-text-tertiary)" }}
+        >
+          Tech Stack
+        </h4>
+        <ul
+          className="space-y-1.5 text-sm"
+          style={{ color: "var(--color-text-secondary)" }}
+        >
+          <li className="flex items-center gap-2">
+            <span style={{ color: "var(--color-accent)" }}>•</span>
+            Tauri v2
+          </li>
+          <li className="flex items-center gap-2">
+            <span style={{ color: "var(--color-accent)" }}>•</span>
+            React 18
+          </li>
+          <li className="flex items-center gap-2">
+            <span style={{ color: "var(--color-accent)" }}>•</span>
+            Rust
+          </li>
+          <li className="flex items-center gap-2">
+            <span style={{ color: "var(--color-accent)" }}>•</span>
+            SQLite
+          </li>
+          <li className="flex items-center gap-2">
+            <span style={{ color: "var(--color-accent)" }}>•</span>
+            Whisper (local transcription)
+          </li>
+          <li className="flex items-center gap-2">
+            <span style={{ color: "var(--color-accent)" }}>•</span>
+            Ollama (local AI inference)
+          </li>
+        </ul>
       </div>
     </div>
   );

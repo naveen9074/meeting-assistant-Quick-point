@@ -28,90 +28,68 @@ export function useRecording(): UseRecordingReturn {
   const [audioLevel, setAudioLevel] = useState(0);
   const [audioPath, setAudioPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [isDualRecording, setIsDualRecording] = useState(false);
-  const [useSegmentTracking, setUseSegmentTracking] = useState(false);
+  // isDualRecording is kept for future dual-recording support but always false now
+  const [isDualRecording] = useState(false);
   const levelIntervalRef = useRef<number | null>(null);
   const currentNoteIdRef = useRef<string | null>(null);
 
-  const startRecording = useCallback(async (noteId: string) => {
-    try {
-      setError(null);
-      currentNoteIdRef.current = noteId;
-
-      // Check if system audio is supported and has permission
-      const isSupported = await audioApi.isSystemAudioSupported();
-      const hasPermission = isSupported
-        ? await audioApi.hasSystemAudioPermission()
-        : false;
-
-      if (isSupported && hasPermission) {
-        // Use dual recording with segment tracking (mic + system audio)
-        console.log("Starting dual recording with segments (mic + system audio)");
-        const result = await audioApi.startDualRecordingWithSegments(noteId);
-        // Use the playback path if available, otherwise mic path
-        setAudioPath(result.playbackPath || result.systemPath || result.micPath);
-        setIsDualRecording(true);
-        setUseSegmentTracking(true);
-      } else {
-        // Fall back to mic-only recording
-        console.log("Starting mic-only recording");
-        const path = await audioApi.startRecording(noteId, activeSessionId);
-        setAudioPath(path);
-        setIsDualRecording(false);
-      }
-      setIsRecording(true);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }, [activeSessionId]);
-
-  const stopRecording = useCallback(
-    async (noteId?: string): Promise<string | null> => {
+  // ─── Start Recording (mic-only for stable cross-platform behavior) ───────────
+  const startRecording = useCallback(
+    async (noteId: string) => {
       try {
         setError(null);
-        const id = noteId || currentNoteIdRef.current;
+        currentNoteIdRef.current = noteId;
 
-        let path: string | null = null;
-
-        if (isDualRecording && id) {
-          // Stop dual recording
-          if (useSegmentTracking) {
-            console.log("Stopping dual recording with segments");
-            const result = await audioApi.stopDualRecordingWithSegments(id);
-            path = result.playbackPath || result.systemPath || result.micPath;
-          } else {
-            console.log("Stopping dual recording");
-            const result = await audioApi.stopDualRecording(id);
-            path = result.playbackPath || result.systemPath || result.micPath;
-          }
-        } else {
-          // Stop mic-only recording
-          console.log("Stopping mic-only recording");
-          path = await audioApi.stopRecording();
-        }
-
+        // Always use mic-only recording.
+        // System audio (WASAPI/loopback) on Windows reports as "supported + permitted"
+        // even with no audio playing, which produces empty WAV files and breaks
+        // transcription. Mic-only is reliable on all platforms.
+        console.log(
+          "[useRecording] Starting mic-only recording for note:",
+          noteId
+        );
+        const path = await audioApi.startRecording(noteId, activeSessionId);
         setAudioPath(path);
+        setIsRecording(true);
+        setRecordingPhase(RecordingPhase.Recording);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [activeSessionId]
+  );
+
+  // ─── Stop Recording ──────────────────────────────────────────────────────────
+  const stopRecording = useCallback(
+    async (_noteId?: string): Promise<string | null> => {
+      try {
+        setError(null);
+
+        // Mic-only stop
+        console.log("[useRecording] Stopping mic-only recording");
+        const path = await audioApi.stopRecording();
+
+        setAudioPath(path ?? null);
         setIsRecording(false);
         setIsPaused(false);
         setRecordingPhase(RecordingPhase.Idle);
-        setIsDualRecording(false);
-        setUseSegmentTracking(false);
         setAudioLevel(0);
         currentNoteIdRef.current = null;
-        return path;
+        return path ?? null;
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
         return null;
       }
     },
-    [isDualRecording, useSegmentTracking]
+    []
   );
 
+  // ─── Pause Recording ─────────────────────────────────────────────────────────
   const pauseRecording = useCallback(async () => {
     try {
       setError(null);
-      console.log("Pausing dual recording");
-      await audioApi.pauseDualRecording();
+      console.log("[useRecording] Pausing mic recording");
+      await audioApi.pauseRecordingCmd();
       setIsRecording(false);
       setIsPaused(true);
       setRecordingPhase(RecordingPhase.Paused);
@@ -121,39 +99,49 @@ export function useRecording(): UseRecordingReturn {
     }
   }, []);
 
+  // ─── Resume Recording ────────────────────────────────────────────────────────
   const resumeRecording = useCallback(async (noteId: string) => {
     try {
       setError(null);
-      console.log("Resuming dual recording");
-      const result = await audioApi.resumeDualRecording(noteId);
-      setAudioPath(result.playbackPath || result.systemPath || result.micPath);
+      console.log("[useRecording] Resuming mic recording for note:", noteId);
+      const path = await audioApi.resumeRecordingCmd(noteId);
+      setAudioPath(path);
       setIsRecording(true);
       setIsPaused(false);
       setRecordingPhase(RecordingPhase.Recording);
-      setIsDualRecording(result.systemPath !== null);
       currentNoteIdRef.current = noteId;
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
   }, []);
 
-  const continueRecording = useCallback(async (noteId: string) => {
-    try {
-      setError(null);
-      console.log("Continuing recording on ended note");
-      const result = await audioApi.continueNoteRecording(noteId);
-      setAudioPath(result.playbackPath || result.systemPath || result.micPath);
-      setIsRecording(true);
-      setIsPaused(false);
-      setRecordingPhase(RecordingPhase.Recording);
-      setIsDualRecording(result.systemPath !== null);
-      currentNoteIdRef.current = noteId;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }, []);
+  // ─── Continue Recording on an Ended Note ────────────────────────────────────
+  const continueRecording = useCallback(
+    async (noteId: string) => {
+      try {
+        setError(null);
+        console.log(
+          "[useRecording] Continuing recording on ended note:",
+          noteId
+        );
+        // Start a new mic-only segment on the same note
+        const path = await audioApi.startRecordingSegment(
+          noteId,
+          activeSessionId
+        );
+        setAudioPath(path);
+        setIsRecording(true);
+        setIsPaused(false);
+        setRecordingPhase(RecordingPhase.Recording);
+        currentNoteIdRef.current = noteId;
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [activeSessionId]
+  );
 
-  // Poll audio level while recording
+  // ─── Poll audio level while recording ───────────────────────────────────────
   useEffect(() => {
     if (isRecording) {
       levelIntervalRef.current = window.setInterval(async () => {
@@ -161,7 +149,7 @@ export function useRecording(): UseRecordingReturn {
           const level = await audioApi.getAudioLevel();
           setAudioLevel(level);
         } catch {
-          // Ignore errors during polling
+          // Ignore polling errors
         }
       }, 100);
     } else {
@@ -178,7 +166,7 @@ export function useRecording(): UseRecordingReturn {
     };
   }, [isRecording]);
 
-  // Check initial recording status
+  // ─── Sync initial recording status on mount ──────────────────────────────────
   useEffect(() => {
     audioApi.getRecordingStatus().then(setIsRecording).catch(console.error);
   }, []);

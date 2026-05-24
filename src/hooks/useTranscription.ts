@@ -130,7 +130,9 @@ export function useTranscription(): UseTranscriptionReturn {
         const result = await transcriptionApi.transcribeDualAudio(
           micPath,
           systemPath,
-          noteId
+          noteId,
+          activeSessionId,
+          null
         );
 
         // Load the transcript from database (includes both "You" and "Others" segments)
@@ -145,7 +147,7 @@ export function useTranscription(): UseTranscriptionReturn {
         setIsTranscribing(false);
       }
     },
-    []
+    [activeSessionId]
   );
 
   const loadTranscript = useCallback(async (noteId: string): Promise<TranscriptSegment[]> => {
